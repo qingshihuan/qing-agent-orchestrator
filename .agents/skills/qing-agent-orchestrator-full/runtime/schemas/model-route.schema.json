@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qing.local/schemas/model-route.schema.json",
+  "title": "Qing Task and Model Route",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["route", "confidence", "category", "reasons", "signals", "responseOwner", "execution", "status", "handoffId", "modelSelection"],
+  "properties": {
+    "route": { "enum": ["chat", "codex", "hybrid"] },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "category": { "enum": ["advice", "analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"] },
+    "reasons": { "type": "array", "items": { "type": "string" } },
+    "signals": { "type": "array", "items": { "type": "string" } },
+    "responseOwner": { "enum": ["outer-session", "relay"] },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edition", "mode", "delegationTarget", "returnsToParent", "currentParentModelUnchanged", "modelSelectionScope", "reasonCodes", "recommendation", "suppressCliPromptForTask", "limitations"],
+      "properties": {
+        "edition": { "enum": ["standard", "full"] },
+        "mode": { "enum": ["desktop-native", "cli-recommended", "cli-setup-required", "cli-awaiting-handoff-approval", "desktop-fallback"] },
+        "delegationTarget": { "enum": ["outer-session", "internal-child", "visible-task"] },
+        "returnsToParent": { "type": "boolean" },
+        "currentParentModelUnchanged": { "const": true },
+        "modelSelectionScope": { "const": "delegated-task" },
+        "reasonCodes": { "type": "array", "items": { "$ref": "#/$defs/cliReasonCode" }, "uniqueItems": true },
+        "recommendation": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["message", "benefit", "reasonCodes", "requiresUserChoice", "response", "dependencyStatus", "installGuide"],
+              "properties": {
+                "message": { "const": "建议切换 CLI 模式" },
+                "benefit": { "type": "string", "minLength": 1 },
+                "reasonCodes": { "type": "array", "items": { "$ref": "#/$defs/cliReasonCode" }, "minItems": 1, "uniqueItems": true },
+                "requiresUserChoice": { "const": true },
+                "response": { "enum": ["pending", "accepted", "declined"] },
+                "dependencyStatus": { "enum": ["not-checked", "missing", "authentication-required", "ready"] },
+                "installGuide": { "const": "https://learn.chatgpt.com/docs/codex/cli" }
+              }
+            }
+          ]
+        },
+        "suppressCliPromptForTask": { "type": "boolean" },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "status": { "enum": ["CHAT_RESPONSE_REQUIRED", "DESKTOP_EXECUTION_REQUIRED", "CLI_RECOMMENDATION_REQUIRED", "CLI_SETUP_REQUIRED", "AWAITING_APPROVAL"] },
+    "handoffId": { "type": ["string", "null"] },
+    "modelSelection": { "type": ["object", "null"] }
+  },
+  "$defs": {
+    "cliReasonCode": {
+      "enum": ["explicit-cli-request", "script-or-ci", "scheduled-batch-unattended", "app-close-persistence", "machine-readable-control-plane", "cli-only-model-or-environment", "process-isolation-or-queue"]
+    }
+  }
+}

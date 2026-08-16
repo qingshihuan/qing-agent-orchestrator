@@ -1,0 +1,33 @@
+{
+  "executor": {
+    "mode": "dry-run",
+    "codexExec": {
+      "enabled": false,
+      "command": "codex",
+      "timeoutMs": 900000,
+      "probeTimeoutMs": 10000,
+      "sandbox": "workspace-write",
+      "ephemeral": true,
+      "ignoreUserConfig": true,
+      "skipGitRepoCheck": false,
+      "windowsSandbox": null,
+      "outputSchemaPath": "schemas/executor-result.schema.json",
+      "maxOutputBytes": 4194304
+    }
+  },
+  "relay": {
+    "maxIterations": 3
+  },
+  "runtime": {
+    "stateDirectory": ".qing/runs"
+  },
+  "modelRouting": {
+    "mode": "inherit",
+    "healthTtlMs": 3600000,
+    "probeTimeoutMs": 30000,
+    "candidates": []
+  },
+  "security": {
+    "approvedGateIds": []
+  }
+}

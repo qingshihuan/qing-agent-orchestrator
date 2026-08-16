@@ -1,0 +1,105 @@
+{
+  "version": "1.0",
+  "id": "game-visual-analyzer-001",
+  "title": "游戏截图审美分析器",
+  "objective": "实现一个读取游戏截图分析请求并输出结构化审美诊断 JSON 的最小模块，覆盖构图、光照、材质、色彩、空间层次和 UI。",
+  "category": "code_change",
+  "workspace": {
+    "root": ".",
+    "allowedPaths": [
+      "src/game-visual-analyzer/**",
+      "tests/game-visual-analyzer/**",
+      "docs/game-visual-analyzer.md"
+    ]
+  },
+  "inputs": [
+    {
+      "name": "product-requirement",
+      "type": "text",
+      "value": "诊断游戏截图的高级感与廉价感来源，给出 P0/P1/P2 修复建议和必须保留项。",
+      "required": true
+    },
+    {
+      "name": "sample-screenshot",
+      "type": "image",
+      "value": "由实际运行者提供；本示例不附带图片",
+      "required": false
+    }
+  ],
+  "constraints": [
+    "不得声称已经分析未提供的截图。",
+    "诊断输出必须区分观察、推断和建议。",
+    "不得修改 allowedPaths 之外的文件。",
+    "不接入付费视觉 API；先实现可替换的分析器接口。"
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "输出包含构图、光照、材质、色彩、空间层次和 UI 六个诊断维度。",
+      "verification": "单元测试断言六个维度字段均存在。", "verificationOwner": "executor"
+    },
+    {
+      "id": "AC-2",
+      "description": "建议按 P0、P1、P2 排序，并包含必须保留项。",
+      "verification": "单元测试验证优先级枚举和 preservation 数组。", "verificationOwner": "executor"
+    },
+    {
+      "id": "AC-3",
+      "description": "缺少截图时返回明确的输入错误，而不是生成虚构诊断。",
+      "verification": "缺图测试夹具返回 INPUT_REQUIRED。", "verificationOwner": "executor"
+    },
+    {
+      "id": "AC-4",
+      "description": "文档说明接口、输入边界、输出示例和未来视觉模型接入点。",
+      "verification": "检查 docs/game-visual-analyzer.md 包含相应章节。", "verificationOwner": "executor"
+    }
+  ],
+  "requestedOperations": [
+    {
+      "type": "write",
+      "target": "src/game-visual-analyzer/**",
+      "reason": "实现分析器类型、接口和规则化占位实现。",
+      "risk": "low"
+    },
+    {
+      "type": "write",
+      "target": "tests/game-visual-analyzer/**",
+      "reason": "添加验收条件对应的测试。",
+      "risk": "low"
+    },
+    {
+      "type": "write",
+      "target": "docs/game-visual-analyzer.md",
+      "reason": "编写使用与扩展文档。",
+      "risk": "low"
+    },
+    {
+      "type": "execute_tests",
+      "target": "npm test",
+      "reason": "验证最小实现。",
+      "risk": "low"
+    }
+  ],
+  "deliverables": [
+    {
+      "path": "src/game-visual-analyzer/index.ts",
+      "description": "分析器公共接口与最小实现"
+    },
+    {
+      "path": "tests/game-visual-analyzer/analyzer.test.ts",
+      "description": "验收条件测试"
+    },
+    {
+      "path": "docs/game-visual-analyzer.md",
+      "description": "接口与未来模型接入文档"
+    }
+  ],
+  "testPlan": [
+    "npm test"
+  ],
+  "maxIterations": 3,
+  "metadata": {
+    "createdAt": "2026-08-14T00:00:00.000Z",
+    "source": "Level 3 phase-1 example"
+  }
+}

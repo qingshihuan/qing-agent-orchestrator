@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "id": "relay-read-only-smoke-001",
+  "title": "Relay 到 Codex CLI 只读冒烟测试",
+  "objective": "只读取 README.md，确认项目声明了 Level 3 Relay 架构和真实 codex exec 的双重启用保护，并返回结构化验证结果。",
+  "category": "analysis",
+  "workspace": {
+    "root": ".",
+    "allowedPaths": [
+      "README.md"
+    ]
+  },
+  "inputs": [
+    {
+      "name": "verification-target",
+      "type": "text",
+      "value": "README.md 中的架构说明与真实执行安全入口",
+      "required": true
+    }
+  ],
+  "constraints": [
+    "只允许读取 README.md。",
+    "不得修改、创建或删除任何文件。",
+    "不得访问网络或调用外部服务。",
+    "只有在 README.md 中找到直接证据时，才能把验收条件标记为 pass。",
+    "artifacts、tests 和 proposedOperations 必须返回空数组，simulated 必须为 false。"
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "AC-SMOKE-1",
+      "description": "确认 README.md 描述了 User、Planner、Handoff、Relay/Safety Gate、Executor 与 Reviewer 的工作流。",
+      "verification": "在 criteriaEvidence 中概括 README.md 的架构链路。", "verificationOwner": "executor"
+    },
+    {
+      "id": "AC-SMOKE-2",
+      "description": "确认 README.md 要求配置启用和 --allow-real-execution 同时存在才会真实调用 Codex。",
+      "verification": "在 criteriaEvidence 中说明双重启用保护。", "verificationOwner": "executor"
+    }
+  ],
+  "requestedOperations": [
+    {
+      "type": "read",
+      "target": "README.md",
+      "reason": "验证 Relay 文档中的架构和安全开关。",
+      "risk": "low"
+    }
+  ],
+  "deliverables": [],
+  "testPlan": [],
+  "maxIterations": 1,
+  "metadata": {
+    "createdAt": "2026-08-14T00:00:00.000Z",
+    "source": "Level 3 real codex exec smoke test"
+  }
+}

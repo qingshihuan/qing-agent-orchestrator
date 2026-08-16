@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qing.local/schemas/model-health.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "capabilities"],
+  "properties": {
+    "status": { "type": "string", "const": "ok" },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["planner", "executor", "reviewer"] }
+    }
+  }
+}

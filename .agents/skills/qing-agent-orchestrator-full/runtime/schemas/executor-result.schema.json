@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qing.local/schemas/executor-result.schema.json",
+  "title": "Qing Relay Executor Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "artifacts", "criteriaEvidence", "tests", "proposedOperations", "simulated"],
+  "properties": {
+    "status": { "enum": ["succeeded", "failed", "skipped"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "description"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "criteriaEvidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["pass", "fail", "not_verified"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "status", "evidence"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["passed", "failed", "not_run"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "proposedOperations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "target", "reason", "risk"],
+        "properties": {
+          "type": {
+            "enum": ["read", "write", "delete", "execute_tests", "install_dependency", "network_access", "use_secret", "external_message", "git_commit", "git_push", "production_deploy", "database_migration"]
+          },
+          "target": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "risk": { "enum": ["low", "medium", "high", "critical"] }
+        }
+      }
+    },
+    "simulated": { "type": "boolean" }
+  }
+}

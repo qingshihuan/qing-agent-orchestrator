@@ -1,0 +1,4 @@
+interface:
+  display_name: "青-Agent-Orchestrator 完整版"
+  short_description: "桌面优先、按需启用 CLI 并保留审批和证据审查的工程编排"
+  default_prompt: "Use $qing-agent-orchestrator-full to complete this task desktop-first and recommend CLI only when a defined condition is met."

@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "id": "relay-trusted-event-read-only-smoke-001",
+  "title": "Relay 受信任事件只读冒烟",
+  "objective": "只读检查 README.md，并由 Relay 从当前 run 观察真实 Codex 进程启动与成功退出事件。",
+  "category": "analysis",
+  "workspace": { "root": ".", "allowedPaths": ["README.md"] },
+  "inputs": [{ "name": "target", "type": "text", "value": "README.md 的受信任事件证据说明", "required": true }],
+  "constraints": [
+    "只允许读取 README.md；不得修改、创建或删除文件。",
+    "不得运行测试、访问网络、使用密钥或执行外部动作。",
+    "本文件只为后续独立人工批准的真实只读 smoke 准备，本次任务不得执行。",
+    "artifacts、tests 和 proposedOperations 必须为空，simulated 必须为 false。"
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "ac-readme",
+      "description": "Executor 确认 README 描述内置受信任事件 collector。",
+      "verification": "基于 README.md 返回直接文本概括。",
+      "verificationOwner": "executor"
+    },
+    {
+      "id": "ac-process-started",
+      "description": "Relay 在当前 run 观察到恰好一个 Codex 进程启动事件。",
+      "verification": "当前 run 的 process.started event-count 等于 1。",
+      "verificationOwner": "relay",
+      "relayVerification": { "kind": "event-count", "eventType": "process.started", "operator": "eq", "expected": 1 }
+    },
+    {
+      "id": "ac-process-exit",
+      "description": "Executor 与 Relay 都确认只读任务成功，且当前进程退出码为零。",
+      "verification": "Executor 提供任务证据，同时 Relay 观察 process.exited.exitCode 等于 0。",
+      "verificationOwner": "hybrid",
+      "relayVerification": { "kind": "event-payload", "eventType": "process.exited", "field": "exitCode", "operator": "eq", "expected": 0 }
+    }
+  ],
+  "requestedOperations": [{ "type": "read", "target": "README.md", "reason": "验证受信任事件 collector 文档。", "risk": "low" }],
+  "deliverables": [],
+  "testPlan": [],
+  "maxIterations": 1,
+  "metadata": { "createdAt": "2026-08-15T00:00:00.000Z", "source": "unexecuted trusted Relay event read-only smoke fixture" }
+}

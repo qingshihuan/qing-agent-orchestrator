@@ -1,0 +1,57 @@
+{
+  "executor": {
+    "mode": "dry-run",
+    "codexExec": {
+      "enabled": false,
+      "command": "codex",
+      "timeoutMs": 900000,
+      "probeTimeoutMs": 10000,
+      "sandbox": "workspace-write",
+      "ephemeral": true,
+      "ignoreUserConfig": true,
+      "skipGitRepoCheck": false,
+      "windowsSandbox": null,
+      "outputSchemaPath": "schemas/executor-result.schema.json",
+      "maxOutputBytes": 4194304
+    }
+  },
+  "relay": {
+    "maxIterations": 3
+  },
+  "modelRouting": {
+    "mode": "explicit",
+    "healthTtlMs": 3600000,
+    "probeTimeoutMs": 30000,
+    "candidates": [
+      {
+        "id": "primary",
+        "model": "example-codex-primary",
+        "profile": null,
+        "reasoningEffort": "high",
+        "roles": ["planner", "executor"],
+        "routes": ["codex", "hybrid"],
+        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
+        "tags": [],
+        "priority": 100,
+        "enabled": true,
+        "fallbacks": ["fallback"]
+      },
+      {
+        "id": "fallback",
+        "model": "example-codex-fallback",
+        "profile": "example-profile",
+        "reasoningEffort": "medium",
+        "roles": ["planner", "executor", "reviewer"],
+        "routes": ["codex", "hybrid"],
+        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
+        "tags": [],
+        "priority": 50,
+        "enabled": true,
+        "fallbacks": []
+      }
+    ]
+  },
+  "security": {
+    "approvedGateIds": []
+  }
+}

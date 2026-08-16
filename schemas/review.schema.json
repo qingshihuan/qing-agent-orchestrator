@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qing.local/schemas/review.schema.json",
+  "title": "Qing Agent Orchestrator Review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "handoffId", "iteration", "verdict", "summary", "criteria", "criterionAudit", "findings", "tests", "revisionInstructions"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "handoffId": { "type": "string", "minLength": 1 },
+    "iteration": { "type": "integer", "minimum": 1 },
+    "verdict": { "enum": ["PASS", "REVISE", "HUMAN_REVIEW"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["pass", "fail", "not_verified"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "criterionAudit": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "verificationOwner", "status", "executorEvidence", "relayEvidenceIds", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "verificationOwner": { "enum": ["executor", "relay", "hybrid"] },
+          "status": { "enum": ["pass", "fail", "not_verified"] },
+          "executorEvidence": { "type": ["object", "null"] },
+          "relayEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "message"],
+        "properties": {
+          "severity": { "enum": ["blocker", "major", "minor", "info"] },
+          "message": { "type": "string", "minLength": 1 },
+          "path": { "type": "string" },
+          "remediation": { "type": "string" }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "status", "evidence"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["passed", "failed", "not_run"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "revisionInstructions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

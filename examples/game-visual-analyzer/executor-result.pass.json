@@ -1,0 +1,21 @@
+{
+  "status": "succeeded",
+  "summary": "示例：实现和测试均完成。该文件只用于 Reviewer 输入演示，不代表真实执行记录。",
+  "artifacts": [
+    { "path": "src/game-visual-analyzer/index.ts", "description": "示例产物证据" },
+    { "path": "tests/game-visual-analyzer/analyzer.test.ts", "description": "示例测试证据" },
+    { "path": "docs/game-visual-analyzer.md", "description": "示例文档证据" }
+  ],
+  "criteriaEvidence": [
+    { "id": "AC-1", "status": "pass", "evidence": "示例证据：字段测试通过。" },
+    { "id": "AC-2", "status": "pass", "evidence": "示例证据：优先级测试通过。" },
+    { "id": "AC-3", "status": "pass", "evidence": "示例证据：缺图测试通过。" },
+    { "id": "AC-4", "status": "pass", "evidence": "示例证据：文档章节存在。" }
+  ],
+  "tests": [
+    { "command": "npm test", "status": "passed", "evidence": "示例证据，不是真实进程输出。" }
+  ],
+  "proposedOperations": [],
+  "simulated": true
+}
+

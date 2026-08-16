@@ -1,0 +1,24 @@
+{
+  "executor": {
+    "mode": "codex-exec",
+    "codexExec": {
+      "enabled": true,
+      "command": "codex",
+      "timeoutMs": 300000,
+      "probeTimeoutMs": 10000,
+      "sandbox": "read-only",
+      "ephemeral": true,
+      "ignoreUserConfig": true,
+      "skipGitRepoCheck": false,
+      "windowsSandbox": "unelevated",
+      "outputSchemaPath": "schemas/executor-result.schema.json",
+      "maxOutputBytes": 4194304
+    }
+  },
+  "relay": {
+    "maxIterations": 1
+  },
+  "security": {
+    "approvedGateIds": []
+  }
+}

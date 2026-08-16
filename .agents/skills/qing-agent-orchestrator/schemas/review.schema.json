@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qing.local/schemas/desktop/review.schema.json",
+  "title": "Qing Agent Orchestrator Desktop Review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "handoffId", "iteration", "executorStatus", "verdict", "summary", "criteria", "criterionAudit", "findings", "tests", "deliverables", "pendingOperations", "revisionInstructions"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "handoffId": { "type": "string", "minLength": 1 },
+    "iteration": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "executorStatus": { "enum": ["succeeded", "failed", "blocked"] },
+    "verdict": { "enum": ["PASS", "REVISE", "HUMAN_REVIEW"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["pass", "fail", "not_verified"] },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "criterionAudit": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "verificationOwner", "status", "executorEvidence", "relayEvidenceIds", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "verificationOwner": { "enum": ["parent", "internal-child", "hybrid"] },
+          "status": { "enum": ["pass", "fail", "not_verified"] },
+          "executorEvidence": { "type": ["object", "null"] },
+          "relayEvidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "message"],
+        "properties": {
+          "severity": { "enum": ["blocker", "major", "minor", "info"] },
+          "message": { "type": "string", "minLength": 1 },
+          "path": { "type": "string" },
+          "remediation": { "type": "string" }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "status", "evidence"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["passed", "failed", "not_run"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "deliverables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "status", "evidence"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["present", "missing", "not_verified"] },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "pendingOperations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "target", "reason"],
+        "properties": {
+          "type": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "revisionInstructions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "verdict": { "const": "PASS" } },
+        "required": ["verdict"]
+      },
+      "then": {
+        "properties": {
+          "executorStatus": { "const": "succeeded" },
+          "criteria": {
+            "items": {
+              "properties": { "status": { "const": "pass" } },
+              "required": ["status"]
+            }
+          },
+          "criterionAudit": {
+            "items": {
+              "properties": { "status": { "const": "pass" } },
+              "required": ["status"]
+            }
+          },
+          "findings": {
+            "items": {
+              "properties": { "severity": { "enum": ["minor", "info"] } },
+              "required": ["severity"]
+            }
+          },
+          "tests": {
+            "items": {
+              "properties": { "status": { "const": "passed" } },
+              "required": ["status"]
+            }
+          },
+          "deliverables": {
+            "items": {
+              "properties": { "status": { "const": "present" } },
+              "required": ["status"]
+            }
+          },
+          "pendingOperations": { "maxItems": 0 },
+          "revisionInstructions": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "verdict": { "const": "REVISE" } },
+        "required": ["verdict"]
+      },
+      "then": {
+        "properties": { "revisionInstructions": { "minItems": 1 } }
+      }
+    }
+  ]
+}
