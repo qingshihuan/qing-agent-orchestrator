@@ -25,6 +25,16 @@ test("example Handoff is valid", async () => {
   assert.equal(result.value?.id, "game-visual-analyzer-001");
 });
 
+test("Handoff rejects cross-platform absolute allowed paths and parent traversal", async () => {
+  for (const allowedPath of ["/etc/passwd", "C:\\Users\\example\\secret.txt", "../outside.txt"]) {
+    const value = (await readExample()) as any;
+    value.workspace.allowedPaths = [allowedPath];
+    const result = validateHandoff(value);
+    assert.equal(result.ok, false, allowedPath);
+    assert.match(result.errors.join("\n"), /workspace\.allowedPaths/);
+  }
+});
+
 test("standard edition is standalone and bundles every declared schema contract", async () => {
   const standardRoot = ".agents/skills/qing-agent-orchestrator";
   assert.deepEqual(await listRelativeFiles(standardRoot), [

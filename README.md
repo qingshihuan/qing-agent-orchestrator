@@ -50,7 +50,7 @@ Handoff 会声明目标、工作区、允许路径、操作、交付物、验收
 - `qing-agent-orchestrator-standard.zip`
 - `qing-agent-orchestrator-full.zip`
 
-解压到用户技能目录，并保证最终目录名与技能名一致：
+解压到用户技能目录，并保证最终目录名与技能名一致。Windows：
 
 ```text
 %USERPROFILE%\.agents\skills\qing-agent-orchestrator\
@@ -60,6 +60,18 @@ Handoff 会声明目标、工作区、允许路径、操作、交付物、验收
 
 ```text
 %USERPROFILE%\.agents\skills\qing-agent-orchestrator-full\
+```
+
+Linux 或 macOS：
+
+```text
+~/.agents/skills/qing-agent-orchestrator/
+```
+
+或：
+
+```text
+~/.agents/skills/qing-agent-orchestrator-full/
 ```
 
 也可以安装到项目自己的 `.agents/skills/`。安装后新建一个桌面任务并调用对应技能。
@@ -100,6 +112,8 @@ $qing-agent-orchestrator-full
 
 完整版本地命令及安全前提见[可选 Codex CLI 接入](docs/codex-integration.md)。
 
+用户接受 CLI 建议后，完整版在 Windows 使用 `scripts/qing.ps1`，在 Linux 或 macOS 使用 `scripts/qing.sh`。例如，依赖检查分别运行 `scripts/qing.ps1 doctor` 或 `scripts/qing.sh doctor`；启动器不会跳过后续 Handoff 和操作审批。
+
 ## 安全与证据
 
 - 精确 Handoff 批准与操作 gate 分离。
@@ -134,7 +148,7 @@ SDK/API 集成会作为后续可选分支，不改变面向大多数订阅用户
 
 ## 开发与验证
 
-需要 Node.js 18 或更新版本：
+需要 Node.js 18 或更新版本。Windows/PowerShell：
 
 ```powershell
 npm install
@@ -143,6 +157,18 @@ npm test
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator-full
 powershell -NoProfile -File scripts/package-skill-editions.ps1 -Validate
+```
+
+Linux/macOS：
+
+```bash
+npm ci --ignore-scripts
+npm run typecheck
+npm test
+python3 "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py" .agents/skills/qing-agent-orchestrator
+python3 "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py" .agents/skills/qing-agent-orchestrator-full
+bash -n .agents/skills/qing-agent-orchestrator-full/scripts/qing.sh
+.agents/skills/qing-agent-orchestrator-full/scripts/qing.sh --help
 ```
 
 架构、证据边界和信任模型见[架构与边界](docs/architecture.md)。版本变化见 [CHANGELOG](CHANGELOG.md)，贡献方式见 [CONTRIBUTING](CONTRIBUTING.md)，安全问题请阅读 [SECURITY](SECURITY.md)。

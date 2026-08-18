@@ -1,4 +1,4 @@
-import { isAbsolute } from "node:path";
+import { posix, win32 } from "node:path";
 const categories = new Set([
     "advice",
     "analysis",
@@ -59,6 +59,10 @@ function nonEmptyString(value) {
 }
 function stringArray(value) {
     return Array.isArray(value) && value.every(nonEmptyString);
+}
+function isAbsoluteOnAnyPlatform(path) {
+    const value = path.trim();
+    return posix.isAbsolute(value.replace(/\\/g, "/")) || win32.isAbsolute(value);
 }
 const relayEvents = new Set(["process.started", "process.exited", "process.heartbeat", "sandbox.preflight"]);
 const relayPayloadFields = {
@@ -133,7 +137,7 @@ export function validateHandoff(value) {
         if (!stringArray(value.workspace.allowedPaths) || value.workspace.allowedPaths.length === 0) {
             errors.push("workspace.allowedPaths must contain at least one path");
         }
-        else if (value.workspace.allowedPaths.some((path) => isAbsolute(path) || path.replace(/\\/g, "/").split("/").includes(".."))) {
+        else if (value.workspace.allowedPaths.some((path) => isAbsoluteOnAnyPlatform(path) || path.replace(/\\/g, "/").split("/").includes(".."))) {
             errors.push("workspace.allowedPaths must use workspace-relative paths without parent traversal");
         }
     }
