@@ -146,11 +146,11 @@ if ($Validate) {
       throw "Standard Review schema PASS guard is incomplete."
     }
 
-    foreach ($required in @("scripts\qing.ps1", "references\codex-exec.md", "runtime\dist\src\cli.js", "runtime\config\relay.user.json")) {
+    foreach ($required in @("scripts\qing.ps1", "scripts\qing.sh", "references\codex-exec.md", "references\desktop-model-routing.md", "runtime\dist\src\cli.js", "runtime\config\relay.user.json")) {
       if (-not (Test-Path -LiteralPath (Join-Path $fullExtract $required))) { throw "Full archive is missing $required" }
     }
     $fullFileCount = @(Get-ChildItem -LiteralPath $fullExtract -Recurse -File).Count
-    if ($fullFileCount -ne 43) { throw "Full archive file count mismatch: expected 43, got $fullFileCount" }
+    if ($fullFileCount -ne 45) { throw "Full archive file count mismatch: expected 45, got $fullFileCount" }
     $executable = Get-ChildItem -LiteralPath $fullExtract -Recurse -File | Where-Object { $_.Name -ieq "codex.exe" }
     if ($executable) { throw "Full archive must not bundle codex.exe." }
   }

@@ -11,7 +11,7 @@ Use the desktop app normally. The optional process backend is an enhancement, no
 
 1. Resolve the exact project and classify the goal with [orchestrator-spec.md](references/orchestrator-spec.md).
 2. Keep advice in the parent and delegate executable work to an internal child task by default. Open a separate visible task only when explicitly requested or needed for observation/isolation.
-3. Choose model and reasoning effort only for the delegated task from candidates available on the selected backend. Never switch the current parent model.
+3. Before creating each desktop child, read and follow [desktop-model-routing.md](references/desktop-model-routing.md). Select from the child-creation tool's currently exposed candidates, record the route decision, and explicitly pass both `model` and `reasoning_effort`. Never switch the current parent model. Silent inheritance is prohibited; use the documented `inherit-fallback` only when the active desktop backend exposes no usable model and reasoning-effort overrides, and disclose it to the user. If overrides exist but no legal candidate exists, stop and request user direction before creating any child.
 4. Create and present a structured Handoff using [handoff-protocol.md](references/handoff-protocol.md).
 5. Evaluate [safety-gates.md](references/safety-gates.md), wait for the exact Handoff and gate approvals, execute, then apply [reviewer-rules.md](references/reviewer-rules.md).
 
@@ -26,11 +26,11 @@ Do not check, install, authenticate, probe, or invoke the CLI during ordinary de
 Explain the concrete benefit and ask the user to accept or decline.
 
 - If declined: record desktop-fallback-selected, suppress repeat prompts for this task, and continue all desktop-capable work. Clearly label any unattended, app-close-persistent, or backend-exclusive part that cannot be provided.
-- If accepted: run scripts/qing.ps1 doctor. This is a dependency check only and must not submit a task.
+- If accepted: select the platform launcher, then run its `doctor` command. Use `scripts/qing.ps1 doctor` on Windows and `scripts/qing.sh doctor` on Linux or macOS. This is a dependency check only and must not submit a task.
   - If unavailable or unauthenticated, point to https://learn.chatgpt.com/docs/codex/cli. Obtain separate approval before any global installation or configuration change.
   - If ready, create a fresh CLI Handoff and safety-gate report. Wait for its exact approval before execution.
 
-Only after the accepted branch, successful dependency check, exact Handoff approval, and all operation gates may scripts/qing.ps1 execute be used. Follow [codex-exec.md](references/codex-exec.md).
+Only after the accepted branch, successful dependency check, exact Handoff approval, and all operation gates may the selected launcher's `execute` command be used. Follow [codex-exec.md](references/codex-exec.md).
 
 ## Invariants
 

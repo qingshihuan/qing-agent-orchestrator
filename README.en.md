@@ -50,7 +50,7 @@ Download one archive from the Release:
 - `qing-agent-orchestrator-standard.zip`
 - `qing-agent-orchestrator-full.zip`
 
-Extract it so the final folder matches the skill name:
+Extract it so the final folder matches the skill name. On Windows:
 
 ```text
 %USERPROFILE%\.agents\skills\qing-agent-orchestrator\
@@ -60,6 +60,18 @@ or:
 
 ```text
 %USERPROFILE%\.agents\skills\qing-agent-orchestrator-full\
+```
+
+On Linux or macOS:
+
+```text
+~/.agents/skills/qing-agent-orchestrator/
+```
+
+or:
+
+```text
+~/.agents/skills/qing-agent-orchestrator-full/
 ```
 
 The skill can also live under a project's `.agents/skills/` directory. Start a new desktop task after installation and invoke the corresponding skill.
@@ -98,6 +110,8 @@ The full edition may recommend the CLI only for:
 
 Code, complexity, and duration alone do not trigger it. Declining returns to desktop execution and suppresses repeated prompts for the task. Accepting starts only a dependency check; installation, configuration, and real execution remain separate approval boundaries.
 
+After the user accepts a CLI recommendation, the full edition uses `scripts/qing.ps1` on Windows and `scripts/qing.sh` on Linux or macOS. For example, the dependency check is `scripts/qing.ps1 doctor` or `scripts/qing.sh doctor`, respectively. The launcher does not bypass the later Handoff or operation approvals.
+
 ## Safety and evidence
 
 - Exact Handoff approval is separate from operation-specific gates.
@@ -115,7 +129,7 @@ It does not yet include an OpenAI API / Codex SDK dual-agent adapter, native app
 
 ## Development
 
-Node.js 18 or newer is required:
+Node.js 18 or newer is required. On Windows/PowerShell:
 
 ```powershell
 npm install
@@ -124,6 +138,18 @@ npm test
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator-full
 powershell -NoProfile -File scripts/package-skill-editions.ps1 -Validate
+```
+
+On Linux/macOS:
+
+```bash
+npm ci --ignore-scripts
+npm run typecheck
+npm test
+python3 "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py" .agents/skills/qing-agent-orchestrator
+python3 "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py" .agents/skills/qing-agent-orchestrator-full
+bash -n .agents/skills/qing-agent-orchestrator-full/scripts/qing.sh
+.agents/skills/qing-agent-orchestrator-full/scripts/qing.sh --help
 ```
 
 Read [CHANGELOG](CHANGELOG.md), [CONTRIBUTING](CONTRIBUTING.md), and [SECURITY](SECURITY.md) before contributing.

@@ -6,7 +6,7 @@ import type {
   RelayCriterionEvidence,
   RunRecord,
 } from "./types.js";
-import { isAbsolute } from "node:path";
+import { posix, win32 } from "node:path";
 
 export interface ValidationResult<T> {
   ok: boolean;
@@ -83,6 +83,11 @@ function stringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(nonEmptyString);
 }
 
+function isAbsoluteOnAnyPlatform(path: string): boolean {
+  const value = path.trim();
+  return posix.isAbsolute(value.replace(/\\/g, "/")) || win32.isAbsolute(value);
+}
+
 const relayEvents = new Set(["process.started", "process.exited", "process.heartbeat", "sandbox.preflight"]);
 const relayPayloadFields: Record<string, Record<string, "number" | "nullable-number" | "string" | "boolean">> = {
   "process.started": { pid: "number" },
@@ -132,7 +137,7 @@ export function validateHandoff(value: unknown): ValidationResult<Handoff> {
     if (!nonEmptyString(value.workspace.root)) errors.push("workspace.root must be a non-empty string");
     if (!stringArray(value.workspace.allowedPaths) || value.workspace.allowedPaths.length === 0) {
       errors.push("workspace.allowedPaths must contain at least one path");
-    } else if (value.workspace.allowedPaths.some((path) => isAbsolute(path) || path.replace(/\\/g, "/").split("/").includes(".."))) {
+    } else if (value.workspace.allowedPaths.some((path) => isAbsoluteOnAnyPlatform(path) || path.replace(/\\/g, "/").split("/").includes(".."))) {
       errors.push("workspace.allowedPaths must use workspace-relative paths without parent traversal");
     }
   }

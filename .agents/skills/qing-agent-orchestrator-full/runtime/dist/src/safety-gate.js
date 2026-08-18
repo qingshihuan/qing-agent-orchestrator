@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isAbsolute } from "node:path";
+import { posix, win32 } from "node:path";
 const humanGated = new Set([
     "delete",
     "network_access",
@@ -24,8 +24,9 @@ function isBroadDeleteTarget(target) {
     return ["", "/", ".", "..", "~", "$home", "%userprofile%", "c:", "d:"].includes(value);
 }
 function escapesWorkspace(target) {
-    const normalized = target.trim().replace(/\\/g, "/");
-    return isAbsolute(target) || normalized.split("/").includes("..");
+    const value = target.trim();
+    const normalized = value.replace(/\\/g, "/");
+    return posix.isAbsolute(normalized) || win32.isAbsolute(value) || normalized.split("/").includes("..");
 }
 function matchesAllowedPath(target, allowedPaths) {
     const normalizedTarget = normalizePath(target);

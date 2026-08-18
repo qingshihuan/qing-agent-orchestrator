@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isAbsolute } from "node:path";
+import { posix, win32 } from "node:path";
 import type { Handoff, OperationRequest } from "./types.js";
 
 export type GateDecisionKind = "ALLOW" | "REQUIRE_APPROVAL" | "DENY";
@@ -45,8 +45,9 @@ function isBroadDeleteTarget(target: string): boolean {
 }
 
 function escapesWorkspace(target: string): boolean {
-  const normalized = target.trim().replace(/\\/g, "/");
-  return isAbsolute(target) || normalized.split("/").includes("..");
+  const value = target.trim();
+  const normalized = value.replace(/\\/g, "/");
+  return posix.isAbsolute(normalized) || win32.isAbsolute(value) || normalized.split("/").includes("..");
 }
 
 function matchesAllowedPath(target: string, allowedPaths: string[]): boolean {
