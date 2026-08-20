@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { validateModelCapability } from "./model-router.js";
 export const defaultConfig = {
     executor: {
         mode: "dry-run",
@@ -57,7 +58,10 @@ function stringArray(value, name) {
 const modelToken = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,127}$/;
 const profileToken = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const roles = new Set(["planner", "executor", "reviewer"]);
-const efforts = new Set(["low", "medium", "high", "xhigh"]);
+const efforts = new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]);
+const backends = new Set(["desktop-child", "codex-cli"]);
+const availabilities = new Set(["host-advertised", "entitlement-dependent"]);
+const complexityBands = new Set(["trivial", "normal", "complex", "high-risk"]);
 const categories = new Set(["advice", "analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"]);
 function parseCandidates(value) {
     if (!Array.isArray(value))
@@ -65,8 +69,10 @@ function parseCandidates(value) {
     const candidates = value.map((item, index) => {
         if (!isRecord(item))
             throw new Error(`modelRouting.candidates[${index}] must be an object`);
-        rejectUnknown(item, ["id", "model", "profile", "reasoningEffort", "roles", "routes", "categories", "tags", "priority", "enabled", "fallbacks"], `modelRouting.candidates[${index}]`);
+        rejectUnknown(item, ["id", "backend", "model", "profile", "reasoningEffort", "availability", "roles", "routes", "categories", "complexityBands", "tags", "priority", "enabled", "fallbacks"], `modelRouting.candidates[${index}]`);
         const id = stringSetting(item.id, "", `modelRouting.candidates[${index}].id`);
+        if (!backends.has(item.backend))
+            throw new Error(`modelRouting.candidates[${index}].backend is unsupported`);
         const model = stringSetting(item.model, "", `modelRouting.candidates[${index}].model`);
         if (!modelToken.test(model))
             throw new Error(`modelRouting.candidates[${index}].model contains unsafe characters`);
@@ -75,6 +81,8 @@ function parseCandidates(value) {
             throw new Error(`modelRouting.candidates[${index}].profile contains unsafe characters`);
         if (!efforts.has(item.reasoningEffort))
             throw new Error(`modelRouting.candidates[${index}].reasoningEffort is unsupported`);
+        if (!availabilities.has(item.availability))
+            throw new Error(`modelRouting.candidates[${index}].availability is unsupported`);
         const candidateRoles = stringArray(item.roles, `modelRouting.candidates[${index}].roles`);
         if (!candidateRoles.every((role) => roles.has(role)) || candidateRoles.length === 0)
             throw new Error(`modelRouting.candidates[${index}].roles contains an unsupported role`);
@@ -84,32 +92,45 @@ function parseCandidates(value) {
         const candidateCategories = stringArray(item.categories ?? [], `modelRouting.candidates[${index}].categories`);
         if (!candidateCategories.every((category) => categories.has(category)))
             throw new Error(`modelRouting.candidates[${index}].categories contains an unsupported category`);
-        return {
+        const candidateComplexityBands = stringArray(item.complexityBands, `modelRouting.candidates[${index}].complexityBands`);
+        if (!candidateComplexityBands.every((band) => complexityBands.has(band)) || candidateComplexityBands.length === 0)
+            throw new Error(`modelRouting.candidates[${index}].complexityBands contains an unsupported band`);
+        const candidate = {
             id,
+            backend: item.backend,
             model,
             profile: profile,
             reasoningEffort: item.reasoningEffort,
+            availability: item.availability,
             roles: candidateRoles,
             routes: routes,
             categories: candidateCategories,
+            complexityBands: candidateComplexityBands,
             tags: stringArray(item.tags ?? [], `modelRouting.candidates[${index}].tags`),
             priority: numberSetting(item.priority, 0, `modelRouting.candidates[${index}].priority`, -10_000, 10_000),
             enabled: booleanSetting(item.enabled, true, `modelRouting.candidates[${index}].enabled`),
             fallbacks: stringArray(item.fallbacks ?? [], `modelRouting.candidates[${index}].fallbacks`),
         };
+        const capabilityError = validateModelCapability(candidate);
+        if (capabilityError)
+            throw new Error(`modelRouting.candidates[${index}] capability mismatch: ${capabilityError}`);
+        return candidate;
     });
     const ids = candidates.map(({ id }) => id);
     if (new Set(ids).size !== ids.length)
         throw new Error("modelRouting.candidates contains duplicate IDs");
     const idSet = new Set(ids);
+    const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
     for (const candidate of candidates) {
-        for (const fallback of candidate.fallbacks)
+        for (const fallback of candidate.fallbacks) {
             if (!idSet.has(fallback))
                 throw new Error(`Candidate '${candidate.id}' has dangling fallback '${fallback}'`);
+            if (byId.get(fallback)?.backend !== candidate.backend)
+                throw new Error(`Candidate '${candidate.id}' fallback '${fallback}' crosses model backends`);
+        }
     }
     const visiting = new Set();
     const visited = new Set();
-    const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
     const visit = (id) => {
         if (visiting.has(id))
             throw new Error(`modelRouting fallback cycle includes '${id}'`);

@@ -10,6 +10,8 @@ import { createPendingDispatchHandoff, routeTask } from "../src/task-router.js";
 test("one-sentence router covers chat, codex, hybrid, and negated risk terms", () => {
   const chat = routeTask("解释这个项目的作用");
   assert.equal(chat.route, "chat");
+  assert.equal(chat.executionOwner, "ChatGPT");
+  assert.equal("responseOwner" in chat, false);
   assert.equal(chat.execution.mode, "desktop-native");
   assert.equal(chat.execution.delegationTarget, "outer-session");
   assert.equal(routeTask("只读分析这段日志并告诉我原因").route, "chat");
@@ -78,6 +80,8 @@ test("dispatch keeps chat child-free, returns desktop execution for code, and ne
     assert.equal(chat.exitCode, 0);
     const chatOutput = JSON.parse(chat.stdout) as Record<string, unknown>;
     assert.equal(chatOutput.status, "CHAT_RESPONSE_REQUIRED");
+    assert.equal(chatOutput.executionOwner, "ChatGPT");
+    assert.doesNotMatch(chat.stdout, /responseOwner/);
     assert.equal(chatOutput.handoffId, null);
     assert.equal(chatOutput.modelSelection, null);
 
@@ -85,8 +89,49 @@ test("dispatch keeps chat child-free, returns desktop execution for code, and ne
     assert.equal(code.exitCode, 0, code.stderr);
     const codeOutput = JSON.parse(code.stdout) as Record<string, unknown>;
     assert.equal(codeOutput.status, "DESKTOP_EXECUTION_REQUIRED");
+    assert.equal(codeOutput.executionOwner, "Codex");
+    assert.doesNotMatch(code.stdout, /responseOwner/);
     assert.equal(codeOutput.handoffId, null);
     assert.equal(codeOutput.modelProbe, "not-applicable");
+    const selected = codeOutput.modelSelection as Record<string, unknown>;
+    assert.equal(selected.complexityBand, "normal");
+    assert.equal(selected.model, "gpt-5.6-luna");
+    assert.equal(selected.executionOwner, "Codex");
+    const invocation = codeOutput.delegationInvocation as {
+      executionOwner: string;
+      spawnAgent: { model: string; reasoning_effort: string };
+      parentModelUnchanged: boolean;
+      fallbackPlan: { orderedCandidates: Array<{ candidateId: string }> };
+      retryProtocol: { displayReplacementBeforeRetry: boolean; recordFallbackReason: boolean; reuseExistingGatesWhenScopeUnchanged: boolean };
+    };
+    assert.deepEqual(invocation.spawnAgent, { model: "gpt-5.6-luna", reasoning_effort: "medium" });
+    assert.equal(invocation.executionOwner, "Codex");
+    assert.equal(invocation.parentModelUnchanged, true);
+    assert.deepEqual(invocation.fallbackPlan.orderedCandidates.map(({ candidateId }) => candidateId), ["desktop-luna-normal", "desktop-terra-normal"]);
+    assert.equal(invocation.retryProtocol.displayReplacementBeforeRetry, true);
+    assert.equal(invocation.retryProtocol.recordFallbackReason, true);
+    assert.equal(invocation.retryProtocol.reuseExistingGatesWhenScopeUnchanged, true);
+
+    const serializedOwnerKeys = (value: unknown): string[] => {
+      if (Array.isArray(value)) return value.flatMap(serializedOwnerKeys);
+      if (!value || typeof value !== "object") return [];
+      return Object.entries(value as Record<string, unknown>).flatMap(([key, nested]) => [
+        ...(key.toLowerCase().endsWith("owner") ? [key] : []),
+        ...serializedOwnerKeys(nested),
+      ]);
+    };
+    for (const output of [chatOutput, codeOutput]) {
+      const ownerKeys = serializedOwnerKeys(output);
+      assert.ok(ownerKeys.length > 0);
+      assert.equal(ownerKeys.every((key) => key === "executionOwner"), true, ownerKeys.join(","));
+    }
+
+    const inherited = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "实现一个示例功能", "--workspace", workspace, "--config", "config/relay.user.example.json"] });
+    assert.equal(inherited.exitCode, 0, inherited.stderr);
+    const inheritedOutput = JSON.parse(inherited.stdout) as { modelSelection: unknown; delegationInvocation: { spawnAgent: unknown; inheritedDefaults: string[] } };
+    assert.equal(inheritedOutput.modelSelection, null);
+    assert.equal(inheritedOutput.delegationInvocation.spawnAgent, null);
+    assert.deepEqual(inheritedOutput.delegationInvocation.inheritedDefaults, ["agents.default_subagent_model", "agents.default_subagent_reasoning_effort"]);
 
     const advice = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "请解释 GitHub Actions CI 的工作原理", "--workspace", workspace, "--config", "config/relay.example.json", "--no-model-probe"] });
     assert.equal(advice.exitCode, 0, advice.stderr);

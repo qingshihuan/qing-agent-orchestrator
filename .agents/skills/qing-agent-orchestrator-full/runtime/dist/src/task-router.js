@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { detectCliReasonCodes, routeExecutionMode } from "./execution-mode-router.js";
+import { analyzeTaskComplexity } from "./task-analyzer.js";
 const code = /实现|修复|重构|写代码|修改|新增|删除|build|implement|fix|refactor|code|edit/i;
 const analysis = /分析|诊断|审查|评估|检查|核对|只读|analy[sz]e|diagnose|review|assess|inspect|audit|read[- ]only/i;
 const advice = /解释|说明|建议|怎么|是什么|为什么|explain|advise|how|what|why/i;
@@ -67,14 +68,16 @@ export function routeTask(text, options = {}) {
             ? ["目标包含单一可执行产物，需要生成 Handoff 并等待精确 ID 批准。"]
             : ["目标包含规划后执行或多个实质类别，需要分阶段 Handoff 和审批。"];
     const execution = routeExecutionMode(task, options.edition ?? "full", route);
+    const complexity = analyzeTaskComplexity({ text: task, category, role: "planner", routeSignals: signals });
     return {
+        executionOwner: execution.executionOwner,
         route,
         confidence: signals.length === 0 ? "low" : materiallyMixed || signals.length === 1 ? "high" : "medium",
         category,
         reasons,
         signals,
-        responseOwner: route === "chat" ? "outer-session" : "relay",
         execution,
+        complexity,
     };
 }
 export function createPendingDispatchHandoff(task, workspace, decision) {

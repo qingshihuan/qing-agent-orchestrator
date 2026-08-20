@@ -15,6 +15,7 @@ import { terminateProcessTree } from "./process-runner.js";
 import { evaluateSafetyGate } from "./safety-gate.js";
 import { ModelHealthChecker } from "./model-health.js";
 import { selectModelCandidate } from "./model-router.js";
+import { analyzeTaskComplexity } from "./task-analyzer.js";
 import { createPendingDispatchHandoff, routeTask } from "./task-router.js";
 import { respondToCliRecommendation } from "./execution-mode-router.js";
 import { validateExecutionResult, validateHandoff } from "./validation.js";
@@ -59,11 +60,18 @@ function plannerOptions(config, bundle) {
         ...(bundle ? { modelSelection: bundle.selection } : {}),
     };
 }
-async function configuredModel(config, role, decision) {
+async function configuredModel(config, role, backend, task, decision) {
     if (config.modelRouting.mode === "inherit")
         return undefined;
     if (decision.route === "chat")
         throw new Error("Chat routing cannot select a Codex model.");
+    const complexity = analyzeTaskComplexity({ text: task, category: decision.category, role, routeSignals: decision.signals });
+    if (backend === "desktop-child") {
+        return {
+            selection: selectModelCandidate(config.modelRouting.candidates, new Map(), { backend, role, route: decision.route, category: decision.category, complexityBand: complexity.band }),
+            health: [],
+        };
+    }
     const checker = new ModelHealthChecker({
         command: config.executor.codexExec.command,
         cwd: runtimeRoot,
@@ -73,11 +81,33 @@ async function configuredModel(config, role, decision) {
         ephemeral: config.executor.codexExec.ephemeral,
         ignoreUserConfig: config.executor.codexExec.ignoreUserConfig,
     });
-    const relevant = config.modelRouting.candidates.filter((candidate) => candidate.enabled && candidate.roles.includes(role));
+    const relevant = config.modelRouting.candidates.filter((candidate) => candidate.enabled && candidate.backend === "codex-cli" && candidate.roles.includes(role));
     const health = await Promise.all(relevant.map((candidate) => checker.check(candidate)));
     const byId = new Map(health.map((record) => [record.candidateId, record]));
-    const complexity = decision.route === "hybrid" || decision.signals.length > 2 ? "complex" : "fast";
-    return { selection: selectModelCandidate(config.modelRouting.candidates, byId, { role, route: decision.route, category: decision.category, tags: [complexity] }), health };
+    return { selection: selectModelCandidate(config.modelRouting.candidates, byId, { backend, role, route: decision.route, category: decision.category, complexityBand: complexity.band }), health };
+}
+function desktopDelegationContract(selection) {
+    return {
+        executionOwner: "Codex",
+        backend: "desktop-child",
+        delegationTarget: "internal-child",
+        parentModelUnchanged: true,
+        modelSelectionScope: "delegated-task",
+        override: selection ? { model: selection.model, reasoningEffort: selection.reasoningEffort } : null,
+        spawnAgent: selection ? { model: selection.model, reasoning_effort: selection.reasoningEffort } : null,
+        fieldMapping: { router: "reasoningEffort", hostInvocation: "reasoning_effort" },
+        inheritedDefaults: selection ? null : ["agents.default_subagent_model", "agents.default_subagent_reasoning_effort"],
+        precedence: "explicit spawn model/reasoning overrides configured subagent defaults",
+        fallbackPlan: selection?.fallbackPlan ?? null,
+        retryProtocol: selection ? {
+            trigger: "spawn-rejected",
+            nextCandidateSource: "fallbackPlan.orderedCandidates",
+            displayReplacementBeforeRetry: true,
+            recordFallbackReason: true,
+            reuseExistingGatesWhenScopeUnchanged: true,
+            newGateRequiredFor: ["backend-change", "operations-change", "allowed-paths-change", "sandbox-change", "permissions-change", "effects-change"],
+        } : null,
+    };
 }
 function createExecutor(mode, config, args, bundle) {
     if (mode === "dry-run")
@@ -145,7 +175,8 @@ async function main() {
             return;
         }
         const checker = new ModelHealthChecker({ command: config.executor.codexExec.command, cwd: runtimeRoot, schemaPath: resolve(runtimeRoot, "schemas/model-health.schema.json"), timeoutMs: config.modelRouting.probeTimeoutMs, ttlMs: config.modelRouting.healthTtlMs, ephemeral: config.executor.codexExec.ephemeral, ignoreUserConfig: config.executor.codexExec.ignoreUserConfig });
-        print({ mode: config.modelRouting.mode, results: await Promise.all(config.modelRouting.candidates.map((candidate) => checker.check(candidate))) });
+        const cliCandidates = config.modelRouting.candidates.filter(({ backend }) => backend === "codex-cli");
+        print({ mode: config.modelRouting.mode, backend: "codex-cli", results: await Promise.all(cliCandidates.map((candidate) => checker.check(candidate))) });
         return;
     }
     if (command === "dispatch") {
@@ -168,7 +199,9 @@ async function main() {
             }
             if (cliResponse === "decline") {
                 execution = await respondToCliRecommendation(execution, "decline");
-                print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "not-applicable", nextStep: "Continue in the desktop parent/internal-child workflow. Do not prompt for or invoke CLI again for this task." });
+                const config = await loadConfig(configPath(args));
+                const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
+                print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Continue in the desktop parent/internal-child workflow. If a real spawn rejects the selected pair, display the next explicit same-backend replacement and record the reason before retrying. Do not prompt for or invoke CLI again for this task." });
                 return;
             }
             const config = await loadConfig(configPath(args));
@@ -191,7 +224,9 @@ async function main() {
             return;
         }
         if (execution.mode === "desktop-native") {
-            print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "not-applicable", nextStep: "Create an internal desktop child task by default and return its result to the parent. No CLI task was created." });
+            const config = await loadConfig(configPath(args));
+            const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
+            print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Create an internal desktop child task with the displayed explicit override (or configured defaults in inherit mode). If a real spawn rejects the pair, display the next explicit same-backend replacement and record the reason before retrying. Return the result to the unchanged parent; no CLI task was created." });
             return;
         }
         const config = await loadConfig(configPath(args));
@@ -202,7 +237,7 @@ async function main() {
             planned = { handoff: createPendingDispatchHandoff(task, workspace, decision), workspace };
         }
         else {
-            bundle = await configuredModel(config, "planner", decision);
+            bundle = await configuredModel(config, "planner", "codex-cli", task, decision);
             planned = await new CodexHandoffPlanner(plannerOptions(config, bundle)).plan(task, workspace);
         }
         const handoffPath = await saveHandoff(planned.handoff, runtimeRoot, config.runtime.stateDirectory, flagValue(args, "--out"));
@@ -265,7 +300,7 @@ async function main() {
         else {
             try {
                 const decision = routeTask(task);
-                const bundle = decision.route === "chat" ? undefined : await configuredModel(config, "planner", decision);
+                const bundle = decision.route === "chat" ? undefined : await configuredModel(config, "planner", "codex-cli", task, decision);
                 planned = await new CodexHandoffPlanner(plannerOptions(config, bundle)).plan(task, workspace);
                 plannerSource = "codex";
             }
@@ -315,16 +350,20 @@ async function main() {
         const decision = routeTask(handoff.objective);
         if (decision.route === "chat")
             throw new Error("A chat-routed goal cannot start the Codex Executor.");
-        const bundle = await configuredModel(config, "executor", decision);
+        const bundle = await configuredModel(config, "executor", "codex-cli", handoff.objective, decision);
         const approvals = [...config.security.approvedGateIds, ...flagValues(args, "--approve")];
-        const relay = new Relay(createExecutor("codex-exec", config, args, bundle), new RuleBasedReviewer());
+        const executor = createExecutor("codex-exec", config, args, bundle);
+        const relay = new Relay(executor, new RuleBasedReviewer());
         const runHandle = await new RunStore(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory)).createRun(handoff);
         const result = await relay.run(handoff, {
             maxIterations: config.relay.maxIterations,
             approvedGateIds: approvals,
             runHandle,
         });
-        print(result);
+        const finalModelSelection = executor instanceof CodexExecExecutor
+            ? executor.finalModelSelection ?? bundle?.selection ?? null
+            : bundle?.selection ?? null;
+        print({ ...result, executionOwner: "Codex", modelSelection: finalModelSelection });
         if (result.status !== "COMPLETED")
             process.exitCode = 4;
         return;

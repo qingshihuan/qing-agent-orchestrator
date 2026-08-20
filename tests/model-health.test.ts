@@ -10,18 +10,24 @@ function result(overrides: Partial<ProcessResult> = {}): ProcessResult {
 }
 
 const candidate: ModelCandidate = {
-  id: "primary", model: "gpt-example", profile: "work", reasoningEffort: "high", roles: ["planner", "executor"],
-  routes: ["codex"], categories: ["code_change"], tags: [], priority: 1, enabled: true, fallbacks: [],
+  id: "primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent", roles: ["planner", "executor"],
+  routes: ["codex"], categories: ["code_change"], complexityBands: ["complex"], tags: [], priority: 1, enabled: true, fallbacks: [],
 };
 
 class HealthRunner implements ProcessRunner {
   readonly requests: ProcessRequest[] = [];
-  constructor(private readonly mode: "ok" | "timeout" | "auth" | "jsonl" | "schema" = "ok") {}
+  constructor(private readonly mode: "ok" | "timeout" | "auth" | "long-process" | "jsonl" | "schema" = "ok") {}
   async run(request: ProcessRequest): Promise<ProcessResult> {
     this.requests.push(request);
     if (request.args[0] === "--version") return result({ stdout: "codex 1.2.3\n" });
     if (this.mode === "timeout") return result({ exitCode: null, timedOut: true });
     if (this.mode === "auth") return result({ exitCode: 1, stderr: "401 OPENAI_API_KEY=secret-value" });
+    if (this.mode === "long-process") return result({
+      exitCode: 37,
+      spawnError: "launcher wrapper reported a child failure",
+      stderr: "secondary diagnostic stream",
+      stdout: `${"PowerShell warning line\n".repeat(80)}FINAL ACTIONABLE ERROR: model alias rejected OPENAI_API_KEY=tail-secret`,
+    });
     const output = request.args[request.args.indexOf("--output-last-message") + 1]!;
     await writeFile(output, this.mode === "schema" ? JSON.stringify({ status: "wrong", capabilities: [] }) : JSON.stringify({ status: "ok", capabilities: ["planner", "executor", "reviewer"] }), "utf8");
     return result({ stdout: this.mode === "jsonl" ? "not-json\n" : '{"type":"turn.completed"}\n' });
@@ -37,7 +43,7 @@ test("preflight uses shell-free argument boundaries and passes model/profile/rea
   assert.equal(record.state, "healthy");
   const probe = runner.requests[1]!;
   assert.equal(probe.command, "fake-codex");
-  assert.deepEqual(probe.args.slice(probe.args.indexOf("-m"), probe.args.indexOf("-m") + 7), ["-m", "gpt-example", "--profile", "work", "-c", 'model_reasoning_effort="high"', "--ephemeral"]);
+  assert.deepEqual(probe.args.slice(probe.args.indexOf("-m"), probe.args.indexOf("-m") + 7), ["-m", "gpt-5.6-sol", "--profile", "work", "-c", 'model_reasoning_effort="high"', "--ephemeral"]);
   assert.equal(probe.args.includes("--sandbox"), true);
   assert.equal(probe.args[probe.args.indexOf("--sandbox") + 1], "read-only");
 });
@@ -58,12 +64,27 @@ test("timeout, authentication, JSONL, and schema failures are fail closed and re
   for (const [mode, expected] of cases) {
     const record = await new ModelHealthChecker(options, new HealthRunner(mode)).check(candidate);
     assert.equal(record.state, "unhealthy"); assert.equal(record.failure, expected);
+    assert.match(record.reason, /exit=(?:null|\d+)/);
     assert.doesNotMatch(record.reason, /secret-value/);
   }
 });
 
+test("long process diagnostics include exit status, every stream, a bounded head and actionable redacted tail", async () => {
+  const record = await new ModelHealthChecker(options, new HealthRunner("long-process")).check(candidate);
+  assert.equal(record.failure, "process");
+  assert.match(record.reason, /exit=37/);
+  assert.match(record.reason, /\[spawnError\].*launcher wrapper/s);
+  assert.match(record.reason, /\[stderr\].*secondary diagnostic/s);
+  assert.match(record.reason, /\[stdout\].*PowerShell warning/s);
+  assert.match(record.reason, /tail preserved/);
+  assert.match(record.reason, /FINAL ACTIONABLE ERROR: model alias rejected OPENAI_API_KEY=\[REDACTED\]/);
+  assert.doesNotMatch(record.reason, /tail-secret/);
+  assert.ok(record.reason.length < 2_000);
+});
+
 test("malicious model/profile and unsupported effort are rejected before a runner exists", () => {
-  assert.throws(() => modelSelectionArgs({ model: "good; calc", profile: null, reasoningEffort: "high" }), /unsafe/);
-  assert.throws(() => modelSelectionArgs({ model: "good", profile: "bad profile", reasoningEffort: "high" }), /unsafe/);
-  assert.throws(() => modelSelectionArgs({ model: "good", profile: null, reasoningEffort: "ultra" as "high" }), /unsupported/);
+  assert.throws(() => modelSelectionArgs({ backend: "codex-cli", model: "good; calc", profile: null, reasoningEffort: "high", availability: "entitlement-dependent" }), /unsafe/);
+  assert.throws(() => modelSelectionArgs({ backend: "codex-cli", model: "gpt-5.6-sol", profile: "bad profile", reasoningEffort: "high", availability: "entitlement-dependent" }), /unsafe/);
+  assert.throws(() => modelSelectionArgs({ backend: "codex-cli", model: "gpt-5.6-sol", profile: null, reasoningEffort: "ultra", availability: "entitlement-dependent" }), /unsupported/);
+  assert.throws(() => modelSelectionArgs({ backend: "desktop-child", model: "gpt-5.6-sol", profile: null, reasoningEffort: "high", availability: "host-advertised" }), /codex-cli/);
 });

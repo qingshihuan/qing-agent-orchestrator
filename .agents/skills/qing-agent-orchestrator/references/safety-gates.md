@@ -46,3 +46,5 @@ Approval cannot convert `DENY` to `ALLOW`; the operation itself must be narrowed
 ## Re-gating
 
 After execution, compare actual/proposed operations with the Handoff. Stop and re-gate any new operation before it occurs. Do not accept an executor's self-approval.
+
+Model identity is not an operation effect. A capability-valid substitution needs no new gate only when it stays on the explicit same-backend chain and a complete explicit proof records requested operations, `allowedPaths`, sandbox, permissions, and effects as unchanged booleans. Missing/incomplete proof, a backend change, or any changed operation, path, sandbox, permission, or effect requires a fresh gate before retrying.

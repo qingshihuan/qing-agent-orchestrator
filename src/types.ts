@@ -12,6 +12,7 @@ export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type SandboxMode = "read-only" | "workspace-write";
 export type WindowsSandboxMode = "unelevated" | "elevated";
 export type TaskRoute = "chat" | "codex" | "hybrid";
+export type ExecutionOwner = "ChatGPT" | "Codex";
 export type OrchestratorEdition = "standard" | "full";
 export type DelegationTarget = "outer-session" | "internal-child" | "visible-task";
 export type ExecutionMode =
@@ -42,6 +43,7 @@ export interface CliRecommendation {
 }
 
 export interface ExecutionModeDecision {
+  executionOwner: ExecutionOwner;
   edition: OrchestratorEdition;
   mode: ExecutionMode;
   delegationTarget: DelegationTarget;
@@ -54,17 +56,23 @@ export interface ExecutionModeDecision {
   limitations: string[];
 }
 export type ModelRole = "planner" | "executor" | "reviewer";
-export type ModelReasoningEffort = "low" | "medium" | "high" | "xhigh";
+export type ModelBackend = "desktop-child" | "codex-cli";
+export type ModelReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+export type ModelAvailability = "host-advertised" | "entitlement-dependent";
+export type ComplexityBand = "trivial" | "normal" | "complex" | "high-risk";
 export type ModelHealthState = "healthy" | "unhealthy" | "unverified" | "expired";
 
 export interface ModelCandidate {
   id: string;
+  backend: ModelBackend;
   model: string;
   profile: string | null;
   reasoningEffort: ModelReasoningEffort;
+  availability: ModelAvailability;
   roles: ModelRole[];
   routes: Array<Exclude<TaskRoute, "chat">>;
   categories: TaskCategory[];
+  complexityBands: ComplexityBand[];
   tags: string[];
   priority: number;
   enabled: boolean;
@@ -78,15 +86,85 @@ export interface ModelRoutingConfig {
   candidates: ModelCandidate[];
 }
 
-export interface ModelSelection {
+export interface ModelPair {
   candidateId: string;
+  backend: ModelBackend;
   model: string;
   profile: string | null;
   reasoningEffort: ModelReasoningEffort;
+}
+
+export interface ModelFallbackPlanCandidate extends ModelPair {
+  availability: ModelAvailability;
+  observedState: "host-advertised" | ModelHealthState;
+  cacheState: "fresh" | "cached" | null;
+}
+
+export interface ModelFallbackPlan {
+  strategy: "completion-first-explicit-chain";
+  orderedCandidates: ModelFallbackPlanCandidate[];
+  sameBackendOnly: true;
+  noImplicitFallthrough: true;
+}
+
+export interface ModelFallbackAttempt {
+  candidate: ModelPair;
+  outcome: "selected" | "unavailable" | "rejected";
+  reason: string;
+}
+
+export interface ModelFallbackScopeProof {
+  operationsUnchanged: boolean;
+  allowedPathsUnchanged: boolean;
+  sandboxUnchanged: boolean;
+  permissionsUnchanged: boolean;
+  effectsUnchanged: boolean;
+}
+
+export interface ModelFallbackGateAssessment extends ModelFallbackScopeProof {
+  backendUnchanged: boolean;
+  scopeProofComplete: boolean;
+  securityScopeUnchanged: boolean;
+  requiresNewGate: boolean;
+  reasons: string[];
+}
+
+export interface ModelFallbackAudit {
+  executionOwner: "Codex";
+  plannedPair: ModelPair;
+  actualPair: ModelPair;
+  fallbackReason: string | null;
+  chain: string[];
+  attempts: ModelFallbackAttempt[];
+  gateAssessment: ModelFallbackGateAssessment;
+}
+
+export interface ModelSelection {
+  executionOwner: "Codex";
+  candidateId: string;
+  backend: ModelBackend;
+  model: string;
+  profile: string | null;
+  reasoningEffort: ModelReasoningEffort;
+  availability: ModelAvailability;
   role: ModelRole;
+  complexityBand: ComplexityBand;
   reason: string;
   cacheState: "fresh" | "cached";
   fallbackFrom: string | null;
+  fallbackPlan: ModelFallbackPlan;
+  fallbackAudit: ModelFallbackAudit;
+}
+
+export interface TaskComplexityAnalysis {
+  score: number;
+  band: ComplexityBand;
+  category: TaskCategory;
+  role: ModelRole;
+  risk: RiskLevel;
+  scope: "single" | "multi-step" | "cross-system";
+  signals: string[];
+  reasons: string[];
 }
 
 export type ProcessState =
@@ -236,6 +314,8 @@ export interface ExecutionResult {
   tests: TestEvidence[];
   proposedOperations: OperationRequest[];
   simulated: boolean;
+  executionOwner?: ExecutionOwner;
+  modelFallbackAudit?: ModelFallbackAudit | null;
 }
 
 export interface ProcessMetadata {

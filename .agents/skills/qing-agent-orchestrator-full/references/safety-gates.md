@@ -5,3 +5,5 @@ Allow declared project reads, scoped project writes, and local tests/builds. Req
 Deny unresolved broad targets, drive/user/workspace-root recursive deletion, paths outside allowedPaths, secret values in prompts/logs, or attempts to bypass the audit trail. A denial requires a corrected Handoff; it cannot be approved away.
 
 The initial CLI recommendation is not approval to inspect, install, configure, authenticate, or execute. Acceptance authorizes only the next declared dependency check. Installation/configuration and the later task execution each keep their own approval boundary.
+
+Gate model substitutions by effects, not model identity. An explicit capability-valid same-backend replacement may reuse existing approvals only when a complete explicit proof records requested operations, allowed paths, sandbox, permissions, and effects as unchanged. Missing/incomplete proof, cross-backend substitution, or any changed permission/effect requires a fresh gate.

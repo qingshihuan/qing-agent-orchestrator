@@ -20,6 +20,14 @@
 2. **执行方式路由**默认留在桌面；只有 CI、定时/批量、应用关闭后继续、机器可读控制或明确进程隔离等场景才建议 CLI。
 3. **模型路由**按角色、任务类型和复杂度，为委派任务选择实际可用的模型与推理强度，不改变父任务模型。
 
+路由和最终报告只使用一个高层执行归属字段：父任务直接回答为 `executionOwner: ChatGPT`，Relay、内部子任务或 CLI 执行为 `executionOwner: Codex`。它不要求展示具体工具名称，也不建立逐工具账本。
+
+复杂度分析不是“快/慢”二选一：它按 category、Planner/Executor/Reviewer role、risk、single/multi-step/cross-system scope 和命中 signals 计算可解释分数，并给出 `trivial | normal | complex | high-risk`。普通单文件代码执行保持 normal；多步骤、跨系统或高风险工作才升级。
+
+模型候选明确绑定 `desktop-child` 或 `codex-cli`。当前内部协作 `collaboration.spawn_agent` 接口公布的桌面候选仅包括 `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna`、`gpt-5.5` 和 `gpt-5.4`；精确推理强度由每个模型的能力表校验。桌面内部子任务实际收到 `{ model, reasoning_effort }`，显式值优先于 `agents.default_subagent_model` / `agents.default_subagent_reasoning_effort`。CLI 路径实际收到 `-m` 和 `model_reasoning_effort`，当前文档边界仅发送 `minimal|low|medium|high|xhigh`，不会把 `max/ultra` 发送给 CLI。任何 override 都只作用于委派后端，父任务模型保持不变。`gpt-5.3-codex-spark` 只保留为官方 Codex CLI 文档列出的、需要 entitlement 预检的 CLI 候选；API catalog 证据不构成桌面内部子任务 entitlement。
+
+这些可用性是当前 host/文档快照，可能随版本、账户和 entitlement 漂移。普通与高风险任务都采用 completion-first 策略：CLI 候选必须通过现有健康预检，桌面真实 spawn 被拒绝时，父任务可在展示替换 pair 和原因后沿显式、能力有效、同后端 fallback 链继续；链耗尽即失败关闭，绝不隐式选择无关候选。CLI 真实调用只有在错误明确点名当前所选 model ID，并说明该模型 unknown、account/entitlement 不支持、metadata not found 或 unavailable 时才有限回退；认证、进程、超时、取消、输出上限、协议、model output schema 或其他普通错误不重试。每次替换都输出 `executionOwner: Codex`、planned/actual pair、原因、链与尝试，以及完整 scope 证明；缺失或不完整证明要求新 gate。ChatGPT/Codex 订阅访问不等于 Responses API entitlement；本项目没有 provider URL、token 或 API adapter。
+
 ## 工作流
 
 ```text
@@ -103,11 +111,12 @@ $qing-agent-orchestrator-full
 ## 安全与证据
 
 - 精确 Handoff 批准与操作 gate 分离。
+- Gate 约束操作效果而非模型身份：同后端替换只有在完整显式证明 operations/allowedPaths/sandbox/permissions/effects 全部不变时无需新 gate；证明缺失/不完整、跨后端或任何权限/效果变化都必须重新审批。
 - 删除、全局安装、密钥、外部消息、push、部署和破坏性迁移需要独立批准。
 - `allowedPaths`、Git 前后快照和未申报变化接受审计。
 - 测试由 Relay 父进程按声明命令独立执行并绑定当前 run、Handoff 和 iteration。
 - `mock`、`dry-run`、heartbeat 或进程存活都不能冒充真实完成。
-- Reviewer 只基于当前迭代的受信任证据给出结论。
+- Reviewer 只基于当前迭代的受信任证据给出结论；最终报告仅以 `ChatGPT`/`Codex` 标注执行归属，并披露实际模型替换或明确说明没有发生替换。
 - 当前配置不接受 provider URL、token 或 secret。
 
 ## 当前能力边界
@@ -144,6 +153,8 @@ python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_valid
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator-full
 powershell -NoProfile -File scripts/package-skill-editions.ps1 -Validate
 ```
+
+打包脚本先写入最终 ZIP，再生成 `artifacts/SHA256SUMS.txt`。`-Validate` 要求 manifest 恰好包含两个归档并复算哈希，同时把完整版本的精确文件清单和每个文件 SHA-256 与声明的技能源码、`dist/src`、schemas、runtime 配置/package 逐项比较；它不再用文件数量代替内容验证。
 
 架构、证据边界和信任模型见[架构与边界](docs/architecture.md)。版本变化见 [CHANGELOG](CHANGELOG.md)，贡献方式见 [CONTRIBUTING](CONTRIBUTING.md)，安全问题请阅读 [SECURITY](SECURITY.md)。
 

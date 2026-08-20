@@ -5,6 +5,47 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 import { CodexHandoffPlanner, planLocally, saveHandoff, type CodexPlannerOptions } from "../src/planner.js";
 import type { ProcessRequest, ProcessResult, ProcessRunner } from "../src/process-runner.js";
+import type { ModelSelection } from "../src/types.js";
+
+function plannerModelSelection(): ModelSelection {
+  const plannedPair = { candidateId: "planner-primary", backend: "codex-cli" as const, model: "gpt-5.6-sol", profile: "work", reasoningEffort: "xhigh" as const };
+  return {
+    executionOwner: "Codex",
+    ...plannedPair,
+    availability: "entitlement-dependent",
+    role: "planner",
+    complexityBand: "complex",
+    reason: "healthy primary",
+    cacheState: "cached",
+    fallbackFrom: null,
+    fallbackPlan: {
+      strategy: "completion-first-explicit-chain",
+      orderedCandidates: [{ ...plannedPair, availability: "entitlement-dependent", observedState: "healthy", cacheState: "cached" }],
+      sameBackendOnly: true,
+      noImplicitFallthrough: true,
+    },
+    fallbackAudit: {
+      plannedPair,
+      actualPair: plannedPair,
+      fallbackReason: null,
+      chain: [plannedPair.candidateId],
+      attempts: [{ candidate: plannedPair, outcome: "selected", reason: "fixture" }],
+      gateAssessment: {
+        backendUnchanged: true,
+        scopeProofComplete: true,
+        operationsUnchanged: true,
+        allowedPathsUnchanged: true,
+        sandboxUnchanged: true,
+        permissionsUnchanged: true,
+        effectsUnchanged: true,
+        securityScopeUnchanged: true,
+        requiresNewGate: false,
+        reasons: [],
+      },
+      executionOwner: "Codex",
+    },
+  };
+}
 
 function result(overrides: Partial<ProcessResult> = {}): ProcessResult {
   return {
@@ -351,9 +392,9 @@ test("planner propagates an explicitly selected model, profile, and reasoning ef
     await mkdir(join(runtime, "schemas"), { recursive: true });
     await writeFile(join(runtime, "schemas", "planner-output.schema.json"), "{}", "utf8");
     const runner = new PlannerRunner();
-    await new CodexHandoffPlanner(plannerOptions(runtime, { modelSelection: { candidateId: "planner-primary", model: "gpt-example", profile: "work", reasoningEffort: "xhigh", role: "planner", reason: "healthy primary", cacheState: "cached", fallbackFrom: null } }), runner).plan("Inspect", workspace);
+    await new CodexHandoffPlanner(plannerOptions(runtime, { modelSelection: plannerModelSelection() }), runner).plan("Inspect", workspace);
     const args = runner.requests[2]!.args;
-    assert.equal(args[args.indexOf("-m") + 1], "gpt-example");
+    assert.equal(args[args.indexOf("-m") + 1], "gpt-5.6-sol");
     assert.equal(args[args.indexOf("--profile") + 1], "work");
     assert.equal(args[args.lastIndexOf("-c") + 1], 'model_reasoning_effort="xhigh"');
     assert.equal(args[args.indexOf("--sandbox") + 1], "read-only");

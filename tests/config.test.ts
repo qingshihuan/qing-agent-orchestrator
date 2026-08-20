@@ -51,8 +51,8 @@ test("desktop standard skill source contains no CLI launcher or runtime material
 test("strict model routing accepts explicit candidates and rejects unsafe configuration", async () => {
   const directory = await mkdtemp(join(tmpdir(), "qing-model-config-"));
   const baseCandidate = {
-    id: "primary", model: "gpt-example", profile: "work", reasoningEffort: "high",
-    roles: ["planner", "executor"], routes: ["codex", "hybrid"], categories: ["code_change"], tags: ["complex"],
+    id: "primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent",
+    roles: ["planner", "executor"], routes: ["codex", "hybrid"], categories: ["code_change"], complexityBands: ["complex"], tags: [],
     priority: 10, enabled: true, fallbacks: ["fallback"],
   };
   const write = async (name: string, value: unknown): Promise<string> => {
@@ -63,10 +63,11 @@ test("strict model routing accepts explicit candidates and rejects unsafe config
     assert.equal(valid.modelRouting.candidates.length, 2);
     await assert.rejects(loadConfig(await write("unknown.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, provider: "forbidden" }] } })), /unknown or forbidden fields.*provider/);
     await assert.rejects(loadConfig(await write("secret.json", { apiKey: "secret" })), /unknown or forbidden fields.*apiKey/);
-    await assert.rejects(loadConfig(await write("effort.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, reasoningEffort: "ultra" }] } })), /reasoningEffort is unsupported/);
+    await assert.rejects(loadConfig(await write("effort.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, reasoningEffort: "max" }] } })), /capability mismatch.*unsupported/);
     await assert.rejects(loadConfig(await write("duplicate.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, baseCandidate] } })), /duplicate IDs/);
     await assert.rejects(loadConfig(await write("dangling.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, fallbacks: ["missing"] }] } })), /dangling fallback/);
     await assert.rejects(loadConfig(await write("cycle.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, { ...baseCandidate, id: "fallback", fallbacks: ["primary"] }] } })), /fallback cycle/);
+    await assert.rejects(loadConfig(await write("cross-backend.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, { ...baseCandidate, id: "fallback", backend: "desktop-child", model: "gpt-5.6-sol", profile: null, availability: "host-advertised", fallbacks: [] }] } })), /crosses model backends/);
     await assert.rejects(loadConfig(await write("inherit-candidate.json", { modelRouting: { mode: "inherit", candidates: [{ ...baseCandidate, fallbacks: [] }] } })), /inherit never silently selects/);
   } finally {
     await rm(directory, { recursive: true, force: true });

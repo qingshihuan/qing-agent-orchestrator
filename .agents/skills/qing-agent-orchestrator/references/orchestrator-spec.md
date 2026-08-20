@@ -36,6 +36,10 @@ Implicit activation is appropriate when a request needs multiple roles, structur
 
 Classify by intended effect, not by nouns in the prompt. Split planning from execution when approval or missing input blocks only one portion.
 
+Expose one high-level execution owner: `ChatGPT` for a chat route answered by the outer parent, otherwise `Codex` for Relay, internal-child, or delegated execution. This is an ownership label, not a concrete tool inventory; do not create a per-tool ledger.
+
+Before selecting a delegated model, record an explainable score and trivial/normal/complex/high-risk band from category, role, risk, scope, and signals. A desktop model override applies only to the internal child through `{ model, reasoning_effort }`; the outer parent remains unchanged. Publish the explicit ordered same-backend fallback plan. A real spawn rejection may advance only to the next capability-valid pair after displaying the replacement and reason and supplying a complete unchanged-scope proof; no unrelated candidate may be selected implicitly.
+
 ## State machine
 
 `DRAFT → VALIDATED → AWAITING_APPROVAL → GATED → EXECUTING → REVIEWING → PASS`
