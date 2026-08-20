@@ -87,6 +87,19 @@ test("dispatch keeps chat child-free, returns desktop execution for code, and ne
     assert.equal(codeOutput.status, "DESKTOP_EXECUTION_REQUIRED");
     assert.equal(codeOutput.handoffId, null);
     assert.equal(codeOutput.modelProbe, "not-applicable");
+    const selected = codeOutput.modelSelection as Record<string, unknown>;
+    assert.equal(selected.complexityBand, "normal");
+    assert.equal(selected.model, "gpt-5.6-luna");
+    const invocation = codeOutput.delegationInvocation as { spawnAgent: { model: string; reasoning_effort: string }; parentModelUnchanged: boolean };
+    assert.deepEqual(invocation.spawnAgent, { model: "gpt-5.6-luna", reasoning_effort: "medium" });
+    assert.equal(invocation.parentModelUnchanged, true);
+
+    const inherited = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "实现一个示例功能", "--workspace", workspace, "--config", "config/relay.user.example.json"] });
+    assert.equal(inherited.exitCode, 0, inherited.stderr);
+    const inheritedOutput = JSON.parse(inherited.stdout) as { modelSelection: unknown; delegationInvocation: { spawnAgent: unknown; inheritedDefaults: string[] } };
+    assert.equal(inheritedOutput.modelSelection, null);
+    assert.equal(inheritedOutput.delegationInvocation.spawnAgent, null);
+    assert.deepEqual(inheritedOutput.delegationInvocation.inheritedDefaults, ["agents.default_subagent_model", "agents.default_subagent_reasoning_effort"]);
 
     const advice = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "请解释 GitHub Actions CI 的工作原理", "--workspace", workspace, "--config", "config/relay.example.json", "--no-model-probe"] });
     assert.equal(advice.exitCode, 0, advice.stderr);

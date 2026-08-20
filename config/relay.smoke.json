@@ -18,6 +18,45 @@
   "relay": {
     "maxIterations": 1
   },
+  "modelRouting": {
+    "mode": "explicit",
+    "healthTtlMs": 3600000,
+    "probeTimeoutMs": 30000,
+    "candidates": [
+      {
+        "id": "cli-smoke-gpt-5.6",
+        "backend": "codex-cli",
+        "model": "gpt-5.6",
+        "profile": null,
+        "reasoningEffort": "medium",
+        "availability": "entitlement-dependent",
+        "roles": ["executor"],
+        "routes": ["codex"],
+        "categories": ["analysis"],
+        "complexityBands": ["normal"],
+        "tags": [],
+        "priority": 100,
+        "enabled": true,
+        "fallbacks": ["cli-smoke-terra"]
+      },
+      {
+        "id": "cli-smoke-terra",
+        "backend": "codex-cli",
+        "model": "gpt-5.6-terra",
+        "profile": null,
+        "reasoningEffort": "medium",
+        "availability": "entitlement-dependent",
+        "roles": ["executor"],
+        "routes": ["codex"],
+        "categories": ["analysis"],
+        "complexityBands": ["normal"],
+        "tags": [],
+        "priority": 50,
+        "enabled": true,
+        "fallbacks": []
+      }
+    ]
+  },
   "security": {
     "approvedGateIds": []
   }

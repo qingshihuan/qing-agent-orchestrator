@@ -20,6 +20,12 @@ Qing separates three routing decisions:
 2. **Execution-mode routing** stays desktop-native by default and recommends the CLI only for CI, scheduled or unattended work, app-close persistence, machine-readable control, or explicit process isolation.
 3. **Model routing** chooses an actually available model and reasoning effort for the delegated role without changing the parent task model.
 
+Complexity is an explainable score rather than a fast/complex toggle. It combines category, Planner/Executor/Reviewer role, risk, single/multi-step/cross-system scope, and observed signals into `trivial | normal | complex | high-risk`. An ordinary single-file code execution stays normal; multi-step, cross-system, and high-risk work escalate.
+
+Every candidate is bound to `desktop-child` or `codex-cli`. The internal `collaboration.spawn_agent` interface advertises only `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, and `gpt-5.4`, with exact per-model effort validation. An internal desktop child receives `{ model, reasoning_effort }`; explicit spawn values override `agents.default_subagent_model` and `agents.default_subagent_reasoning_effort`. The CLI receives `-m` and `model_reasoning_effort`; the documented CLI path sends only `minimal|low|medium|high|xhigh`, never `max/ultra`. Overrides apply only to delegated backends and never switch the parent. `gpt-5.3-codex-spark` remains only as an entitlement-probed CLI candidate listed by the official Codex models documentation; API catalog evidence is not desktop-child entitlement.
+
+Availability is a current host/documentation snapshot and can drift with version, account, or entitlement. CLI candidates must pass the existing health probe, and fallback is restricted to explicit same-backend chains. ChatGPT/Codex subscription access is not Responses API entitlement; this project has no provider URL, token, or API adapter.
+
 ## Workflow
 
 ```text
@@ -125,6 +131,8 @@ python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_valid
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator-full
 powershell -NoProfile -File scripts/package-skill-editions.ps1 -Validate
 ```
+
+The packaging script writes the final ZIPs before generating `artifacts/SHA256SUMS.txt`. `-Validate` requires exactly both archive names and recomputes their hashes, then compares the full edition's exact inventory and every file SHA-256 with the declared skill sources, `dist/src`, schemas, and generated runtime config/package. File counts are not used as a content proxy.
 
 Read [CHANGELOG](CHANGELOG.md), [CONTRIBUTING](CONTRIBUTING.md), and [SECURITY](SECURITY.md) before contributing.
 

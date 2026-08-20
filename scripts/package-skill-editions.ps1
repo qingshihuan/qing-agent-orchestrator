@@ -9,6 +9,18 @@ $standardRoot = Join-Path $projectRoot ".agents\skills\qing-agent-orchestrator"
 $fullRoot = Join-Path $projectRoot ".agents\skills\qing-agent-orchestrator-full"
 $artifactsRoot = Join-Path $projectRoot "artifacts"
 $runtimeRoot = Join-Path $fullRoot "runtime"
+$checksumManifest = Join-Path $artifactsRoot "SHA256SUMS.txt"
+
+function Get-RelativeFileList([string] $Root) {
+  return @(Get-ChildItem -LiteralPath $Root -Recurse -File | ForEach-Object {
+    $_.FullName.Substring($Root.Length + 1).Replace("\", "/")
+  } | Sort-Object)
+}
+
+function Assert-ExactFileSet([string[]] $Expected, [string[]] $Actual, [string] $Label) {
+  $difference = @(Compare-Object -ReferenceObject @($Expected | Sort-Object) -DifferenceObject @($Actual | Sort-Object))
+  if ($difference.Count -ne 0) { throw "$Label file set mismatch: $($difference | ConvertTo-Json -Compress)" }
+}
 
 foreach ($required in @(
   (Join-Path $standardRoot "SKILL.md"),
@@ -61,8 +73,32 @@ $fullZip = Join-Path $artifactsRoot "qing-agent-orchestrator-full.zip"
 Compress-Archive -Path (Join-Path $standardRoot "*") -DestinationPath $standardZip -Force
 Compress-Archive -Path (Join-Path $fullRoot "*") -DestinationPath $fullZip -Force
 
+$archiveNames = @(
+  "qing-agent-orchestrator-standard.zip",
+  "qing-agent-orchestrator-full.zip"
+)
+$checksumLines = @($archiveNames | ForEach-Object {
+  $hash = (Get-FileHash -LiteralPath (Join-Path $artifactsRoot $_) -Algorithm SHA256).Hash
+  "$hash  $_"
+})
+[System.IO.File]::WriteAllText($checksumManifest, ($checksumLines -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
+
 if ($Validate) {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $manifestEntries = @{}
+  $manifestLines = @(Get-Content -LiteralPath $checksumManifest)
+  if ($manifestLines.Count -ne 2) { throw "Checksum manifest must contain exactly two entries." }
+  foreach ($line in $manifestLines) {
+    if ($line -notmatch '^([0-9A-Fa-f]{64})  ([^\\/]+\.zip)$') { throw "Malformed checksum manifest entry: $line" }
+    $name = $matches[2]
+    if ($manifestEntries.ContainsKey($name)) { throw "Duplicate checksum manifest entry: $name" }
+    $manifestEntries[$name] = $matches[1].ToUpperInvariant()
+  }
+  Assert-ExactFileSet $archiveNames @($manifestEntries.Keys) "Checksum manifest"
+  foreach ($name in $archiveNames) {
+    $actualHash = (Get-FileHash -LiteralPath (Join-Path $artifactsRoot $name) -Algorithm SHA256).Hash
+    if ($actualHash -ne $manifestEntries[$name]) { throw "Checksum manifest hash mismatch: $name" }
+  }
   if ([string]::IsNullOrWhiteSpace($ValidationRoot)) {
     $validationBoundary = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd("\")
     $validationRoot = [System.IO.Path]::GetFullPath((Join-Path $validationBoundary ("qing-skill-validation-" + [Guid]::NewGuid().ToString("N"))))
@@ -106,11 +142,13 @@ if ($Validate) {
       "schemas/review.schema.json",
       "SKILL.md"
     ) | Sort-Object
-    $actualStandardFiles = @(Get-ChildItem -LiteralPath $standardExtract -Recurse -File | ForEach-Object {
-      $_.FullName.Substring($standardExtract.Length + 1).Replace("\", "/")
-    } | Sort-Object)
-    $standardDifference = @(Compare-Object -ReferenceObject $expectedStandardFiles -DifferenceObject $actualStandardFiles)
-    if ($standardDifference.Count -ne 0) { throw "Standard archive file set mismatch: $($standardDifference | ConvertTo-Json -Compress)" }
+    $actualStandardFiles = Get-RelativeFileList $standardExtract
+    Assert-ExactFileSet $expectedStandardFiles $actualStandardFiles "Standard archive"
+    foreach ($relativePath in $expectedStandardFiles) {
+      $sourceHash = (Get-FileHash -LiteralPath (Join-Path $standardRoot $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
+      $archiveHash = (Get-FileHash -LiteralPath (Join-Path $standardExtract $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
+      if ($sourceHash -ne $archiveHash) { throw "Standard archive content mismatch: $relativePath" }
+    }
 
     $standardText = (Get-ChildItem -LiteralPath $standardExtract -Recurse -File | ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName }) -join "`n"
     if ($standardText -match "codex\s+exec|Codex CLI|QING_RELAY_HOME|qing\.ps1") { throw "Standard archive contains a CLI marker." }
@@ -146,11 +184,40 @@ if ($Validate) {
       throw "Standard Review schema PASS guard is incomplete."
     }
 
-    foreach ($required in @("scripts\qing.ps1", "references\codex-exec.md", "runtime\dist\src\cli.js", "runtime\config\relay.user.json")) {
-      if (-not (Test-Path -LiteralPath (Join-Path $fullExtract $required))) { throw "Full archive is missing $required" }
+    $declaredFullSkillFiles = @(
+      "agents/openai.yaml",
+      "references/codex-exec.md",
+      "references/execution-modes.md",
+      "references/handoff-protocol.md",
+      "references/orchestrator-spec.md",
+      "references/reviewer-rules.md",
+      "references/safety-gates.md",
+      "scripts/qing.ps1",
+      "SKILL.md"
+    )
+    $generatedRuntimeFiles = @(
+      Get-RelativeFileList (Join-Path $projectRoot "dist\src") | ForEach-Object { "runtime/dist/src/$_" }
+      Get-RelativeFileList (Join-Path $projectRoot "schemas") | ForEach-Object { "runtime/schemas/$_" }
+      "runtime/config/relay.user.json"
+      "runtime/package.json"
+    )
+    $expectedFullFiles = @($declaredFullSkillFiles + $generatedRuntimeFiles | Sort-Object)
+    Assert-ExactFileSet $expectedFullFiles (Get-RelativeFileList $fullRoot) "Full source tree"
+    Assert-ExactFileSet $expectedFullFiles (Get-RelativeFileList $fullExtract) "Full archive"
+    foreach ($relativePath in $expectedFullFiles) {
+      $sourcePath = if ($relativePath.StartsWith("runtime/dist/src/")) {
+        Join-Path (Join-Path $projectRoot "dist\src") $relativePath.Substring("runtime/dist/src/".Length).Replace("/", "\")
+      }
+      elseif ($relativePath.StartsWith("runtime/schemas/")) {
+        Join-Path (Join-Path $projectRoot "schemas") $relativePath.Substring("runtime/schemas/".Length).Replace("/", "\")
+      }
+      else {
+        Join-Path $fullRoot $relativePath.Replace("/", "\")
+      }
+      $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash
+      $archiveHash = (Get-FileHash -LiteralPath (Join-Path $fullExtract $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
+      if ($sourceHash -ne $archiveHash) { throw "Full archive content mismatch: $relativePath" }
     }
-    $fullFileCount = @(Get-ChildItem -LiteralPath $fullExtract -Recurse -File).Count
-    if ($fullFileCount -ne 43) { throw "Full archive file count mismatch: expected 43, got $fullFileCount" }
     $executable = Get-ChildItem -LiteralPath $fullExtract -Recurse -File | Where-Object { $_.Name -ieq "codex.exe" }
     if ($executable) { throw "Full archive must not bundle codex.exe." }
   }

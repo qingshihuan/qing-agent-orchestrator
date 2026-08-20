@@ -68,12 +68,42 @@ export function redactSensitiveText(value: string): string {
     .replace(/("(?:api[_-]?key|access[_-]?token)"\s*:\s*")[^"]+("?)/gi, "$1[REDACTED]$2");
 }
 
+function boundedHeadAndTail(value: string, limit = 1_600): string {
+  const normalized = value.trim();
+  if (normalized.length <= limit) return normalized;
+  const marker = `\n...[truncated ${normalized.length - limit} chars; tail preserved]...\n`;
+  const available = Math.max(0, limit - marker.length);
+  const headLength = Math.floor(available * 0.4);
+  const tailLength = available - headLength;
+  return normalized.slice(0, headLength) + marker + normalized.slice(-tailLength);
+}
+
+export function formatProcessDiagnostic(result: ProcessResult, limit = 1_600): string {
+  const status = [
+    `exit=${result.exitCode === null ? "null" : result.exitCode}`,
+    `signal=${result.signal ?? "none"}`,
+    `timedOut=${result.timedOut}`,
+    `cancelled=${result.cancelled ?? false}`,
+    `outputLimitExceeded=${result.outputLimitExceeded}`,
+  ].join(" ");
+  const rawStreams: Array<readonly [string, string]> = [];
+  if (result.spawnError) rawStreams.push(["spawnError", result.spawnError]);
+  if (result.stderr) rawStreams.push(["stderr", result.stderr]);
+  if (result.stdout) rawStreams.push(["stdout", result.stdout]);
+  const streamLimit = Math.max(256, Math.floor(limit / Math.max(1, rawStreams.length)) - 24);
+  const streams = rawStreams.map(([name, value]) => `[${name}]\n${boundedHeadAndTail(redactSensitiveText(value), streamLimit)}`).join("\n");
+  return `${status}${streams ? `\n${streams}` : ""}`;
+}
+
 function processFailure(prefix: string, result: ProcessResult): string {
-  const detail = redactSensitiveText(result.spawnError || result.stderr || result.stdout).trim().slice(0, 800);
-  if (result.timedOut) return `${prefix}: process timed out.`;
-  if (result.cancelled) return `${prefix}: process was explicitly cancelled.`;
-  if (result.outputLimitExceeded) return `${prefix}: process output exceeded the configured limit.`;
-  return `${prefix}: ${detail || `exit code ${String(result.exitCode)}`}`;
+  const condition = result.timedOut
+    ? "process timed out"
+    : result.cancelled
+      ? "process was explicitly cancelled"
+      : result.outputLimitExceeded
+        ? "process output exceeded the configured limit"
+        : "process failed";
+  return `${prefix}: ${condition}. ${formatProcessDiagnostic(result)}`;
 }
 
 function pathIsInside(base: string, target: string): boolean {
@@ -207,10 +237,14 @@ export class CodexExecExecutor implements Executor {
     if (this.options.modelSelection) {
       context.onModelEvent?.("model.selected", {
         candidateId: this.options.modelSelection.candidateId,
+        backend: this.options.modelSelection.backend,
         model: this.options.modelSelection.model,
         profile: this.options.modelSelection.profile,
         reasoningEffort: this.options.modelSelection.reasoningEffort,
+        availability: this.options.modelSelection.availability,
         role: this.options.modelSelection.role,
+        complexityBand: this.options.modelSelection.complexityBand,
+        invocation: { modelFlag: "-m", reasoningConfig: "model_reasoning_effort" },
         reason: this.options.modelSelection.reason,
         cacheState: this.options.modelSelection.cacheState,
         fallbackFrom: this.options.modelSelection.fallbackFrom,

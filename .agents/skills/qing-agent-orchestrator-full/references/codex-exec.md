@@ -13,6 +13,7 @@ Use this adapter only after the full-edition recommendation was accepted.
 ## Invocation rules
 
 - Spawn with an argument array and shell disabled.
+- Pass the capability-validated delegated model through `-m` and map router `reasoningEffort` to `model_reasoning_effort`. The documented process backend allows only minimal, low, medium, high, or xhigh; never send max or ultra without an explicit runtime capability update.
 - Send the prompt over stdin and request JSONL plus a schema-validated final result.
 - Use read-only or workspace-write, never unrestricted access.
 - Keep workspace, sandbox, approval, output schema, timeout, and audit settings controlled by Relay rather than model candidates.

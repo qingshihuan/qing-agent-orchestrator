@@ -3,7 +3,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeProcessRunner } from "./process-runner.js";
-import { redactSensitiveText } from "./executors/codex-exec-executor.js";
+import { formatProcessDiagnostic, redactSensitiveText } from "./executors/codex-exec-executor.js";
+import { validateModelCapability } from "./model-router.js";
 function jsonlError(stdout) {
     const lines = stdout.split(/\r?\n/).filter(Boolean);
     if (lines.length === 0)
@@ -21,20 +22,22 @@ function jsonlError(stdout) {
     return null;
 }
 function failureFrom(result) {
-    const diagnostic = redactSensitiveText(result.spawnError ?? result.stderr ?? result.stdout).slice(0, 500);
+    const diagnostic = formatProcessDiagnostic(result);
     if (result.timedOut)
-        return { failure: "timeout", reason: "Model preflight timed out." };
+        return { failure: "timeout", reason: `Model preflight timed out. ${diagnostic}` };
     if (/auth|login|unauthori[sz]ed|forbidden|401|403/i.test(diagnostic)) {
-        return { failure: "authentication", reason: "Model preflight authentication failed." };
+        return { failure: "authentication", reason: `Model preflight authentication failed. ${diagnostic}` };
     }
-    return { failure: "process", reason: `Model preflight process failed${diagnostic ? `: ${diagnostic}` : "."}` };
+    return { failure: "process", reason: `Model preflight process failed. ${diagnostic}` };
 }
 export function candidateFingerprint(candidate, cliVersion) {
     return createHash("sha256").update(JSON.stringify({
         cliVersion,
+        backend: candidate.backend,
         model: candidate.model,
         profile: candidate.profile,
         reasoningEffort: candidate.reasoningEffort,
+        availability: candidate.availability,
         roles: [...candidate.roles].sort(),
     })).digest("hex");
 }
@@ -46,8 +49,11 @@ export function modelSelectionArgs(candidate) {
         throw new Error("Model ID contains unsafe characters.");
     if (candidate.profile !== null && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(candidate.profile))
         throw new Error("Profile contains unsafe characters.");
-    if (!["low", "medium", "high", "xhigh"].includes(candidate.reasoningEffort))
-        throw new Error("Reasoning effort is unsupported.");
+    if (candidate.backend !== "codex-cli")
+        throw new Error("Codex CLI arguments require a codex-cli model selection.");
+    const capabilityError = validateModelCapability(candidate);
+    if (capabilityError)
+        throw new Error(`Reasoning/model capability is unsupported: ${capabilityError}`);
     const args = ["-m", candidate.model];
     if (candidate.profile)
         args.push("--profile", candidate.profile);
@@ -67,6 +73,9 @@ export class ModelHealthChecker {
     async check(candidate) {
         if (!candidate.enabled)
             return this.unverified(candidate.id, "Candidate is disabled.");
+        const capabilityError = validateModelCapability(candidate);
+        if (candidate.backend !== "codex-cli" || capabilityError)
+            return this.unverified(candidate.id, capabilityError ?? "Desktop child candidates are not probed through Codex CLI.");
         const cliVersion = await this.cliVersion();
         const fingerprint = candidateFingerprint(candidate, cliVersion);
         const now = (this.options.now ?? Date.now)();
@@ -139,7 +148,7 @@ export class ModelHealthChecker {
             else {
                 const protocol = jsonlError(result.stdout);
                 if (protocol) {
-                    record = { candidateId: candidate.id, fingerprint, cliVersion, state: "unhealthy", cacheState: "fresh", checkedAt, expiresAt, failure: "jsonl", reason: protocol };
+                    record = { candidateId: candidate.id, fingerprint, cliVersion, state: "unhealthy", cacheState: "fresh", checkedAt, expiresAt, failure: "jsonl", reason: `${protocol} ${formatProcessDiagnostic(result)}` };
                 }
                 else {
                     let value;
@@ -152,10 +161,10 @@ export class ModelHealthChecker {
                     const raw = value && typeof value === "object" && !Array.isArray(value) ? value : null;
                     const capabilities = raw?.capabilities;
                     if (raw?.status !== "ok" || !Array.isArray(capabilities) || !capabilities.every((item) => typeof item === "string")) {
-                        record = { candidateId: candidate.id, fingerprint, cliVersion, state: "unhealthy", cacheState: "fresh", checkedAt, expiresAt, failure: "schema", reason: "Model preflight final output failed the health schema." };
+                        record = { candidateId: candidate.id, fingerprint, cliVersion, state: "unhealthy", cacheState: "fresh", checkedAt, expiresAt, failure: "schema", reason: `Model preflight final output failed the health schema. ${formatProcessDiagnostic(result)}` };
                     }
                     else if (!candidate.roles.every((role) => capabilities.includes(role))) {
-                        record = { candidateId: candidate.id, fingerprint, cliVersion, state: "unhealthy", cacheState: "fresh", checkedAt, expiresAt, failure: "capability", reason: "Model preflight did not confirm every configured role." };
+                        record = { candidateId: candidate.id, fingerprint, cliVersion, state: "unhealthy", cacheState: "fresh", checkedAt, expiresAt, failure: "capability", reason: `Model preflight did not confirm every configured role. ${formatProcessDiagnostic(result)}` };
                     }
                     else {
                         record = { candidateId: candidate.id, fingerprint, cliVersion, state: "healthy", cacheState: "fresh", checkedAt, expiresAt, failure: null, reason: "Bounded structured preflight passed." };

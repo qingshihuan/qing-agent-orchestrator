@@ -247,12 +247,12 @@ test("executor propagates the selected model without changing security arguments
   const events: Array<{ type: string; value: Record<string, unknown> }> = [];
   const execution = await new CodexExecExecutor({
     ...options(),
-    modelSelection: { candidateId: "executor-primary", model: "gpt-example", profile: "work", reasoningEffort: "high", role: "executor", reason: "healthy", cacheState: "fresh", fallbackFrom: null },
+    modelSelection: { candidateId: "executor-primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent", role: "executor", complexityBand: "complex", reason: "healthy", cacheState: "fresh", fallbackFrom: null },
     modelHealth: [{ candidateId: "executor-primary", fingerprint: "hash", cliVersion: "codex 1", state: "healthy", cacheState: "fresh", checkedAt: "2026-01-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", failure: null, reason: "passed" }],
   }, fake).execute(handoff, { iteration: 1, revisionInstructions: [], onModelEvent: (type, value) => events.push({ type, value }) });
   assert.equal(execution.status, "succeeded");
   const args = fake.requests[2]!.args;
-  assert.equal(args[args.indexOf("-m") + 1], "gpt-example");
+  assert.equal(args[args.indexOf("-m") + 1], "gpt-5.6-sol");
   assert.equal(args[args.indexOf("--profile") + 1], "work");
   assert.equal(args[args.lastIndexOf("-c") + 1], 'model_reasoning_effort="high"');
   assert.equal(args[args.indexOf("--sandbox") + 1], "workspace-write");
@@ -263,7 +263,7 @@ test("executor propagates the selected model without changing security arguments
 test("executor rejects unsafe model selection before any process request", async () => {
   const handoff = await exampleHandoff();
   const fake = new FakeCodexRunner(handoff);
-  const execution = await new CodexExecExecutor({ ...options(), modelSelection: { candidateId: "bad", model: "good; calc", profile: null, reasoningEffort: "high", role: "executor", reason: "fixture", cacheState: "fresh", fallbackFrom: null } }, fake).execute(handoff, { iteration: 1, revisionInstructions: [] });
+  const execution = await new CodexExecExecutor({ ...options(), modelSelection: { candidateId: "bad", backend: "codex-cli", model: "good; calc", profile: null, reasoningEffort: "high", availability: "entitlement-dependent", role: "executor", complexityBand: "normal", reason: "fixture", cacheState: "fresh", fallbackFrom: null } }, fake).execute(handoff, { iteration: 1, revisionInstructions: [] });
   assert.equal(execution.status, "failed"); assert.match(execution.summary, /before process creation/);
   assert.equal(fake.requests.length, 0);
 });

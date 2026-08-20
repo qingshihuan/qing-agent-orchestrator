@@ -38,7 +38,9 @@ CLI 是完整版的条件能力，不是完整版的启动依赖。标准版没�
 
 CLI 只能使用本机已配置并通过最小健康检查的候选。Planner 和 Executor 以独立参数获得最终 ModelSelection。sandbox、审批、workspace、network、schema、ephemeral、Windows runtime 和审计设置不能由候选覆盖。
 
-配置接受 model、可选 profile、low|medium|high|xhigh 推理强度、roles、routes、categories、tags、priority、enabled、fallbacks。它拒绝 provider URL、token、secret 和未知字段。
+配置接受 backend、model、可选 CLI profile、精确 reasoningEffort、availability、roles、routes、categories、complexityBands、tags、priority、enabled、fallbacks。CLI 文档当前确认 `minimal|low|medium|high|xhigh`，因此即使桌面主机对部分模型公布 `max/ultra`，Relay 也不会把它们发送给 CLI。配置按 model/backend 精确校验，拒绝跨后端 fallback、provider URL、token、secret 和未知字段。
+
+CLI 可配置 `gpt-5.6`（通用模型指导中该 alias 指向 `gpt-5.6-sol`），推荐候选 ID 为 `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` 和 `gpt-5.3-codex-spark`。是否实际可用取决于本机版本、账户和 entitlement；只有最小预检健康的候选能被选择。当前订阅访问不应被解释为 Responses API entitlement，本实现也没有 API adapter。
 
 ## 进程协议
 

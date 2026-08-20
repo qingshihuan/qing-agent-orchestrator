@@ -4,7 +4,7 @@
 
 1. Task Router：判断 chat、codex 或 hybrid，决定父任务直接回答还是需要结构化执行合同。
 2. Execution Mode Router：判断 desktop-native、cli-recommended、cli-setup-required、cli-awaiting-handoff-approval 或 desktop-fallback。
-3. Model Router：只为委派角色选择所选后端实际可用的模型、profile 和推理强度。
+3. Model Router：先由 Task Analyzer 按 category、role、risk、scope、signals 计算分数与四档 band，再只为委派角色选择所选后端能力表允许的 model/profile/reasoning 组合。
 
 写代码不会自动命中 CLI。父任务模型永不因子任务路由而切换。
 
@@ -29,6 +29,18 @@
       → PASS | REVISE | HUMAN_REVIEW
 
 内部子任务默认把结果返回父任务。用户明确要求或需要独立观察/隔离时才创建可见任务。
+
+桌面内部子任务调用合同是 `spawnAgent: { model, reasoning_effort }`，其中 router 字段 `reasoningEffort` 明确映射到 host 参数 `reasoning_effort`；显式 spawn 参数优先于两个 `agents.default_subagent_*` 默认值。可选进程后端合同是 `-m <model>` 加 `model_reasoning_effort`。两者都不会改变 outer parent。
+
+当前桌面 host capability snapshot：
+
+| model | reasoning effort |
+| --- | --- |
+| `gpt-5.6-sol`, `gpt-5.6-terra` | low, medium, high, xhigh, max, ultra |
+| `gpt-5.6-luna` | low, medium, high, xhigh, max |
+| `gpt-5.5`, `gpt-5.4` | low, medium, high, xhigh |
+
+该表严格对应当前 `collaboration.spawn_agent` 接口，不从 API catalog 推导桌面 entitlement。OpenAI 通用模型指导中的 `gpt-5.6` alias 指向 `gpt-5.6-sol`，API reasoning 支持 none、low、medium、high、xhigh、max；这是文档证据，不是本项目的 API 接口。本项目没有 API adapter，也不会把订阅可用性当成 Responses API entitlement。`gpt-5.3-codex-spark` 只存在于 CLI capability 表，并继续要求健康预检。
 
 ## 关键不变量
 

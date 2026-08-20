@@ -4,7 +4,7 @@
   "title": "Qing Task and Model Route",
   "type": "object",
   "additionalProperties": false,
-  "required": ["route", "confidence", "category", "reasons", "signals", "responseOwner", "execution", "status", "handoffId", "modelSelection"],
+  "required": ["route", "confidence", "category", "reasons", "signals", "responseOwner", "execution", "complexity", "status", "handoffId", "modelSelection"],
   "properties": {
     "route": { "enum": ["chat", "codex", "hybrid"] },
     "confidence": { "enum": ["low", "medium", "high"] },
@@ -12,6 +12,7 @@
     "reasons": { "type": "array", "items": { "type": "string" } },
     "signals": { "type": "array", "items": { "type": "string" } },
     "responseOwner": { "enum": ["outer-session", "relay"] },
+    "complexity": { "$ref": "#/$defs/complexity" },
     "execution": {
       "type": "object",
       "additionalProperties": false,
@@ -49,9 +50,81 @@
     },
     "status": { "enum": ["CHAT_RESPONSE_REQUIRED", "DESKTOP_EXECUTION_REQUIRED", "CLI_RECOMMENDATION_REQUIRED", "CLI_SETUP_REQUIRED", "AWAITING_APPROVAL"] },
     "handoffId": { "type": ["string", "null"] },
-    "modelSelection": { "type": ["object", "null"] }
+    "handoffPath": { "type": ["string", "null"] },
+    "modelProbe": { "enum": ["not-started", "not-applicable", "dependency-check-only", "skipped-by-explicit-flag", "completed"] },
+    "modelHealth": { "type": "array", "items": { "type": "object" } },
+    "handoff": { "type": "object" },
+    "safetyGate": { "type": "object" },
+    "nextStep": { "type": "string" },
+    "modelSelection": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["candidateId", "backend", "model", "profile", "reasoningEffort", "availability", "role", "complexityBand", "reason", "cacheState", "fallbackFrom"],
+          "properties": {
+            "candidateId": { "type": "string", "minLength": 1 },
+            "backend": { "$ref": "#/$defs/modelBackend" },
+            "model": { "type": "string", "minLength": 1 },
+            "profile": { "type": ["string", "null"] },
+            "reasoningEffort": { "$ref": "#/$defs/reasoningEffort" },
+            "availability": { "enum": ["host-advertised", "entitlement-dependent"] },
+            "role": { "enum": ["planner", "executor", "reviewer"] },
+            "complexityBand": { "$ref": "#/$defs/complexityBand" },
+            "reason": { "type": "string", "minLength": 1 },
+            "cacheState": { "enum": ["fresh", "cached"] },
+            "fallbackFrom": { "type": ["string", "null"] }
+          }
+        }
+      ]
+    },
+    "delegationInvocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "delegationTarget", "parentModelUnchanged", "modelSelectionScope", "override", "spawnAgent", "fieldMapping", "inheritedDefaults", "precedence"],
+      "properties": {
+        "backend": { "const": "desktop-child" },
+        "delegationTarget": { "const": "internal-child" },
+        "parentModelUnchanged": { "const": true },
+        "modelSelectionScope": { "const": "delegated-task" },
+        "override": { "type": ["object", "null"] },
+        "spawnAgent": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["model", "reasoning_effort"],
+              "properties": { "model": { "type": "string" }, "reasoning_effort": { "$ref": "#/$defs/reasoningEffort" } }
+            }
+          ]
+        },
+        "fieldMapping": { "type": "object" },
+        "inheritedDefaults": { "type": ["array", "null"], "items": { "type": "string" } },
+        "precedence": { "type": "string" }
+      }
+    }
   },
   "$defs": {
+    "modelBackend": { "enum": ["desktop-child", "codex-cli"] },
+    "reasoningEffort": { "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] },
+    "complexityBand": { "enum": ["trivial", "normal", "complex", "high-risk"] },
+    "complexity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "band", "category", "role", "risk", "scope", "signals", "reasons"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 0 },
+        "band": { "$ref": "#/$defs/complexityBand" },
+        "category": { "enum": ["advice", "analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"] },
+        "role": { "enum": ["planner", "executor", "reviewer"] },
+        "risk": { "enum": ["low", "medium", "high", "critical"] },
+        "scope": { "enum": ["single", "multi-step", "cross-system"] },
+        "signals": { "type": "array", "items": { "type": "string" } },
+        "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
     "cliReasonCode": {
       "enum": ["explicit-cli-request", "script-or-ci", "scheduled-batch-unattended", "app-close-persistence", "machine-readable-control-plane", "cli-only-model-or-environment", "process-isolation-or-queue"]
     }

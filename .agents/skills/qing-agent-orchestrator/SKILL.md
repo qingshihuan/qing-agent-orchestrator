@@ -14,7 +14,7 @@ Use the desktop app as the complete Planner → Relay → Executor → Reviewer 
    - Answer advice and simple read-only reasoning in the parent.
    - Use an internal child task for executable or independently reviewable work.
    - Create a separate user-visible task only when the user explicitly asks for one or needs distinct observation/isolation.
-3. Select a model and reasoning effort only for the delegated task from options actually available in the desktop app. Never change the current parent model merely to route work.
+3. Score delegated work deterministically from category, role, risk, scope, and observed signals. Select a model/reasoning pair only from the current desktop host capability list. Pass an explicit internal-child payload `{ model, reasoning_effort }`; explicit spawn values override `agents.default_subagent_model` and `agents.default_subagent_reasoning_effort`. Never change the current parent model merely to route work.
 4. Create a structured Handoff using [handoff-protocol.md](references/handoff-protocol.md) and validate it against the desktop-only [Handoff schema](schemas/handoff.schema.json). Show its exact ID, objective, paths, deliverables, tests, and requested operations.
 5. Evaluate [safety-gates.md](references/safety-gates.md), then pause for approval of the exact Handoff ID and every operation-specific gate. Never infer approval from general consent.
 6. After approval, execute within the declared paths using desktop tools or an internal child task. Keep results returning to the parent by default and report role, selected model, reasoning effort, phase, and status.
@@ -24,7 +24,9 @@ Use the desktop app as the complete Planner → Relay → Executor → Reviewer 
 ## Desktop invariants
 
 - Do not create an external process-backed execution path.
+- Before creating, spawning, or reactivating every internal child task, display in commentary the child role/task, explicit model, reasoning effort, and that the parent model remains unchanged. If the host cannot explicitly select or verify the model or reasoning effort, state `inherited/unconfirmed` before delegation and never invent values; this also applies to follow-up and reactivated agents.
 - Keep the parent conversation model unchanged; model routing applies to delegated tasks only.
+- Treat advertised model availability as a host snapshot that can drift with entitlement; if spawning rejects a pair, fail closed or follow only the displayed explicit fallback chain.
 - Preserve unrelated files and existing user changes.
 - Never treat planning, mock output, or a live child task as proof of completion.
 - Continue useful parent work while child tasks run, and provide concise progress updates during long work.

@@ -351,9 +351,9 @@ test("planner propagates an explicitly selected model, profile, and reasoning ef
     await mkdir(join(runtime, "schemas"), { recursive: true });
     await writeFile(join(runtime, "schemas", "planner-output.schema.json"), "{}", "utf8");
     const runner = new PlannerRunner();
-    await new CodexHandoffPlanner(plannerOptions(runtime, { modelSelection: { candidateId: "planner-primary", model: "gpt-example", profile: "work", reasoningEffort: "xhigh", role: "planner", reason: "healthy primary", cacheState: "cached", fallbackFrom: null } }), runner).plan("Inspect", workspace);
+    await new CodexHandoffPlanner(plannerOptions(runtime, { modelSelection: { candidateId: "planner-primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: "work", reasoningEffort: "xhigh", availability: "entitlement-dependent", role: "planner", complexityBand: "complex", reason: "healthy primary", cacheState: "cached", fallbackFrom: null } }), runner).plan("Inspect", workspace);
     const args = runner.requests[2]!.args;
-    assert.equal(args[args.indexOf("-m") + 1], "gpt-example");
+    assert.equal(args[args.indexOf("-m") + 1], "gpt-5.6-sol");
     assert.equal(args[args.indexOf("--profile") + 1], "work");
     assert.equal(args[args.lastIndexOf("-c") + 1], 'model_reasoning_effort="xhigh"');
     assert.equal(args[args.indexOf("--sandbox") + 1], "read-only");

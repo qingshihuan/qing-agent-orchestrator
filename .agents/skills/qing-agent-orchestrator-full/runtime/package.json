@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test dist/tests/validation.test.js dist/tests/safety-gate.test.js dist/tests/relay.test.js dist/tests/process-runner.test.js dist/tests/codex-exec-executor.test.js dist/tests/config.test.js dist/tests/planner.test.js dist/tests/workspace.test.js dist/tests/git-audit.test.js dist/tests/task-router.test.js dist/tests/execution-mode-router.test.js dist/tests/model-router.test.js dist/tests/model-health.test.js",
+    "test": "npm run build && node --test dist/tests/validation.test.js dist/tests/safety-gate.test.js dist/tests/relay.test.js dist/tests/process-runner.test.js dist/tests/codex-exec-executor.test.js dist/tests/config.test.js dist/tests/planner.test.js dist/tests/workspace.test.js dist/tests/git-audit.test.js dist/tests/task-router.test.js dist/tests/execution-mode-router.test.js dist/tests/task-analyzer.test.js dist/tests/model-router.test.js dist/tests/model-health.test.js",
     "cli": "npm run build --silent && node dist/src/cli.js",
     "qing": "npm run build --silent && node dist/src/cli.js",
     "doctor": "npm run build --silent && node dist/src/cli.js doctor --config config/relay.example.json",

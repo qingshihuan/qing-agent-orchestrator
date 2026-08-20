@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { detectCliReasonCodes, routeExecutionMode } from "./execution-mode-router.js";
-import type { ExecutionModeDecision, Handoff, OperationRequest, OrchestratorEdition, TaskCategory, TaskRoute } from "./types.js";
+import { analyzeTaskComplexity } from "./task-analyzer.js";
+import type { ExecutionModeDecision, Handoff, OperationRequest, OrchestratorEdition, TaskCategory, TaskComplexityAnalysis, TaskRoute } from "./types.js";
 
 export interface TaskRouteDecision {
   route: TaskRoute;
@@ -10,6 +11,7 @@ export interface TaskRouteDecision {
   signals: string[];
   responseOwner: "outer-session" | "relay";
   execution: ExecutionModeDecision;
+  complexity: TaskComplexityAnalysis;
 }
 
 export interface TaskRouteOptions {
@@ -76,6 +78,7 @@ export function routeTask(text: string, options: TaskRouteOptions = {}): TaskRou
       : ["目标包含规划后执行或多个实质类别，需要分阶段 Handoff 和审批。"];
 
   const execution = routeExecutionMode(task, options.edition ?? "full", route);
+  const complexity = analyzeTaskComplexity({ text: task, category, role: "planner", routeSignals: signals });
   return {
     route,
     confidence: signals.length === 0 ? "low" : materiallyMixed || signals.length === 1 ? "high" : "medium",
@@ -84,6 +87,7 @@ export function routeTask(text: string, options: TaskRouteOptions = {}): TaskRou
     signals,
     responseOwner: route === "chat" ? "outer-session" : "relay",
     execution,
+    complexity,
   };
 }
 

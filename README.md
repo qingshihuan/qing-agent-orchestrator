@@ -20,6 +20,12 @@
 2. **执行方式路由**默认留在桌面；只有 CI、定时/批量、应用关闭后继续、机器可读控制或明确进程隔离等场景才建议 CLI。
 3. **模型路由**按角色、任务类型和复杂度，为委派任务选择实际可用的模型与推理强度，不改变父任务模型。
 
+复杂度分析不是“快/慢”二选一：它按 category、Planner/Executor/Reviewer role、risk、single/multi-step/cross-system scope 和命中 signals 计算可解释分数，并给出 `trivial | normal | complex | high-risk`。普通单文件代码执行保持 normal；多步骤、跨系统或高风险工作才升级。
+
+模型候选明确绑定 `desktop-child` 或 `codex-cli`。当前内部协作 `collaboration.spawn_agent` 接口公布的桌面候选仅包括 `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna`、`gpt-5.5` 和 `gpt-5.4`；精确推理强度由每个模型的能力表校验。桌面内部子任务实际收到 `{ model, reasoning_effort }`，显式值优先于 `agents.default_subagent_model` / `agents.default_subagent_reasoning_effort`。CLI 路径实际收到 `-m` 和 `model_reasoning_effort`，当前文档边界仅发送 `minimal|low|medium|high|xhigh`，不会把 `max/ultra` 发送给 CLI。任何 override 都只作用于委派后端，父任务模型保持不变。`gpt-5.3-codex-spark` 只保留为官方 Codex CLI 文档列出的、需要 entitlement 预检的 CLI 候选；API catalog 证据不构成桌面内部子任务 entitlement。
+
+这些可用性是当前 host/文档快照，可能随版本、账户和 entitlement 漂移；CLI 候选必须通过现有健康预检，失败时只沿显式同后端 fallback 链。ChatGPT/Codex 订阅访问不等于 Responses API entitlement；本项目没有 provider URL、token 或 API adapter。
+
 ## 工作流
 
 ```text
@@ -144,6 +150,8 @@ python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_valid
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator-full
 powershell -NoProfile -File scripts/package-skill-editions.ps1 -Validate
 ```
+
+打包脚本先写入最终 ZIP，再生成 `artifacts/SHA256SUMS.txt`。`-Validate` 要求 manifest 恰好包含两个归档并复算哈希，同时把完整版本的精确文件清单和每个文件 SHA-256 与声明的技能源码、`dist/src`、schemas、runtime 配置/package 逐项比较；它不再用文件数量代替内容验证。
 
 架构、证据边界和信任模型见[架构与边界](docs/architecture.md)。版本变化见 [CHANGELOG](CHANGELOG.md)，贡献方式见 [CONTRIBUTING](CONTRIBUTING.md)，安全问题请阅读 [SECURITY](SECURITY.md)。
 

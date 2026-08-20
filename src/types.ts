@@ -54,17 +54,23 @@ export interface ExecutionModeDecision {
   limitations: string[];
 }
 export type ModelRole = "planner" | "executor" | "reviewer";
-export type ModelReasoningEffort = "low" | "medium" | "high" | "xhigh";
+export type ModelBackend = "desktop-child" | "codex-cli";
+export type ModelReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+export type ModelAvailability = "host-advertised" | "entitlement-dependent";
+export type ComplexityBand = "trivial" | "normal" | "complex" | "high-risk";
 export type ModelHealthState = "healthy" | "unhealthy" | "unverified" | "expired";
 
 export interface ModelCandidate {
   id: string;
+  backend: ModelBackend;
   model: string;
   profile: string | null;
   reasoningEffort: ModelReasoningEffort;
+  availability: ModelAvailability;
   roles: ModelRole[];
   routes: Array<Exclude<TaskRoute, "chat">>;
   categories: TaskCategory[];
+  complexityBands: ComplexityBand[];
   tags: string[];
   priority: number;
   enabled: boolean;
@@ -80,13 +86,27 @@ export interface ModelRoutingConfig {
 
 export interface ModelSelection {
   candidateId: string;
+  backend: ModelBackend;
   model: string;
   profile: string | null;
   reasoningEffort: ModelReasoningEffort;
+  availability: ModelAvailability;
   role: ModelRole;
+  complexityBand: ComplexityBand;
   reason: string;
   cacheState: "fresh" | "cached";
   fallbackFrom: string | null;
+}
+
+export interface TaskComplexityAnalysis {
+  score: number;
+  band: ComplexityBand;
+  category: TaskCategory;
+  role: ModelRole;
+  risk: RiskLevel;
+  scope: "single" | "multi-step" | "cross-system";
+  signals: string[];
+  reasons: string[];
 }
 
 export type ProcessState =

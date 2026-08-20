@@ -36,6 +36,8 @@ Implicit activation is appropriate when a request needs multiple roles, structur
 
 Classify by intended effect, not by nouns in the prompt. Split planning from execution when approval or missing input blocks only one portion.
 
+Before selecting a delegated model, record an explainable score and trivial/normal/complex/high-risk band from category, role, risk, scope, and signals. A desktop model override applies only to the internal child through `{ model, reasoning_effort }`; the outer parent remains unchanged.
+
 ## State machine
 
 `DRAFT → VALIDATED → AWAITING_APPROVAL → GATED → EXECUTING → REVIEWING → PASS`
