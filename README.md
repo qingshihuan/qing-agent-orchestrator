@@ -1,6 +1,6 @@
 # 青-Agent-Orchestrator
 
-[English](README.en.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
+[English](README.en.md) · [v0.4.0 发布说明](docs/release-notes-v0.4.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
 **让擅长理解、规划和沟通的模型先把事情想清楚，让擅长代码与工程执行的 Codex 完成实现与验证。**
 
@@ -27,6 +27,14 @@
 模型候选明确绑定 `desktop-child` 或 `codex-cli`。当前内部协作 `collaboration.spawn_agent` 接口公布的桌面候选仅包括 `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna`、`gpt-5.5` 和 `gpt-5.4`；精确推理强度由每个模型的能力表校验。桌面内部子任务实际收到 `{ model, reasoning_effort }`，显式值优先于 `agents.default_subagent_model` / `agents.default_subagent_reasoning_effort`。CLI 路径实际收到 `-m` 和 `model_reasoning_effort`，当前文档边界仅发送 `minimal|low|medium|high|xhigh`，不会把 `max/ultra` 发送给 CLI。任何 override 都只作用于委派后端，父任务模型保持不变。`gpt-5.3-codex-spark` 只保留为官方 Codex CLI 文档列出的、需要 entitlement 预检的 CLI 候选；API catalog 证据不构成桌面内部子任务 entitlement。
 
 这些可用性是当前 host/文档快照，可能随版本、账户和 entitlement 漂移。普通与高风险任务都采用 completion-first 策略：CLI 候选必须通过现有健康预检，桌面真实 spawn 被拒绝时，父任务可在展示替换 pair 和原因后沿显式、能力有效、同后端 fallback 链继续；链耗尽即失败关闭，绝不隐式选择无关候选。CLI 真实调用只有在错误明确点名当前所选 model ID，并说明该模型 unknown、account/entitlement 不支持、metadata not found 或 unavailable 时才有限回退；认证、进程、超时、取消、输出上限、协议、model output schema 或其他普通错误不重试。每次替换都输出 `executionOwner: Codex`、planned/actual pair、原因、链与尝试，以及完整 scope 证明；缺失或不完整证明要求新 gate。ChatGPT/Codex 订阅访问不等于 Responses API entitlement；本项目没有 provider URL、token 或 API adapter。
+
+## v0.4.0 发布重点
+
+- **真实模型路由：** 按后端能力、角色、复杂度和推理强度选择明确的 model/reasoning pair，并保持父任务模型不变。
+- **单一执行归属：** 对外只使用 `executionOwner: ChatGPT | Codex`，不再暴露第二套 owner 分类。
+- **Completion-first 回退：** 只沿显式、能力有效的同后端链替换模型，记录 planned/actual pair、原因、链和每次尝试；没有候选时失败关闭。
+- **高风险 gate 不降级：** 仅在完整证明 operations、allowedPaths、sandbox、permissions 和 effects 均未变化时复用原 gate；跨后端、证明不完整或范围变化必须重新审批。
+- **错误分类失败关闭：** 只有明确的 selected-model 标识、账户 entitlement、metadata 或 availability 拒绝能够触发有限回退；认证、进程、超时、取消、输出上限、协议、output schema 和普通错误均不重试。
 
 ## 工作流
 
@@ -121,10 +129,12 @@ $qing-agent-orchestrator-full
 
 ## 当前能力边界
 
-`v0.3.0` 包含：
+`v0.4.0` 包含：
 
 - 桌面标准版与桌面优先完整版；
-- Task / Execution Mode / Model Router；
+- Task / Execution Mode Router，以及向真实委派参数落地的 Model Router；
+- 唯一的 `executionOwner: ChatGPT | Codex` 高层归属合同；
+- completion-first 显式同后端模型回退、高风险同范围 gate 复用和失败关闭分类；
 - Handoff、Executor Result、Review 和证据 Schema；
 - Safety Gate、Relay、RunStore 与规则 Reviewer；
 - 可观测的 `status/logs/cancel` 控制面；
@@ -140,6 +150,8 @@ $qing-agent-orchestrator-full
 - 真实 CLI 写入 E2E。
 
 SDK/API 集成会作为后续可选分支，不改变面向大多数订阅用户的桌面优先主线。详见[路线图](docs/roadmap.md)。
+
+本版本的证据边界：已连接桌面委派以 `gpt-5.6-luna / medium` 成功；已连接 CLI 的 `gpt-5.6 / medium` 尝试被当前账户/entitlement 拒绝；最新 fallback 仅由受控 Executor fake-runner 测试证明，不能当作新的 connected CLI 成功。详见 [v0.4.0 发布说明](docs/release-notes-v0.4.0.md)。`v0.3.0` 的历史说明继续保留在 [v0.3.0 发布说明](docs/release-notes-v0.3.0.md)。
 
 ## 开发与验证
 
