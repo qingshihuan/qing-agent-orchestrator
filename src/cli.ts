@@ -103,6 +103,7 @@ async function configuredModel(config: RelayConfig, role: ModelRole, backend: Mo
 
 function desktopDelegationContract(selection: ModelSelection | null) {
   return {
+    executionOwner: "Codex",
     backend: "desktop-child",
     delegationTarget: "internal-child",
     parentModelUnchanged: true,
@@ -112,6 +113,15 @@ function desktopDelegationContract(selection: ModelSelection | null) {
     fieldMapping: { router: "reasoningEffort", hostInvocation: "reasoning_effort" },
     inheritedDefaults: selection ? null : ["agents.default_subagent_model", "agents.default_subagent_reasoning_effort"],
     precedence: "explicit spawn model/reasoning overrides configured subagent defaults",
+    fallbackPlan: selection?.fallbackPlan ?? null,
+    retryProtocol: selection ? {
+      trigger: "spawn-rejected",
+      nextCandidateSource: "fallbackPlan.orderedCandidates",
+      displayReplacementBeforeRetry: true,
+      recordFallbackReason: true,
+      reuseExistingGatesWhenScopeUnchanged: true,
+      newGateRequiredFor: ["backend-change", "operations-change", "allowed-paths-change", "sandbox-change", "permissions-change", "effects-change"],
+    } : null,
   };
 }
 
@@ -209,7 +219,7 @@ async function main(): Promise<void> {
         execution = await respondToCliRecommendation(execution, "decline");
         const config = await loadConfig(configPath(args));
         const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
-        print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Continue in the desktop parent/internal-child workflow. Do not prompt for or invoke CLI again for this task." });
+        print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Continue in the desktop parent/internal-child workflow. If a real spawn rejects the selected pair, display the next explicit same-backend replacement and record the reason before retrying. Do not prompt for or invoke CLI again for this task." });
         return;
       }
       const config = await loadConfig(configPath(args));
@@ -233,7 +243,7 @@ async function main(): Promise<void> {
     if (execution.mode === "desktop-native") {
       const config = await loadConfig(configPath(args));
       const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
-      print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Create an internal desktop child task with the displayed explicit override (or configured defaults in inherit mode) and return its result to the unchanged parent. No CLI task was created." });
+      print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Create an internal desktop child task with the displayed explicit override (or configured defaults in inherit mode). If a real spawn rejects the pair, display the next explicit same-backend replacement and record the reason before retrying. Return the result to the unchanged parent; no CLI task was created." });
       return;
     }
     const config = await loadConfig(configPath(args));
@@ -353,14 +363,18 @@ async function main(): Promise<void> {
     if (decision.route === "chat") throw new Error("A chat-routed goal cannot start the Codex Executor.");
     const bundle = await configuredModel(config, "executor", "codex-cli", handoff.objective, decision);
     const approvals = [...config.security.approvedGateIds, ...flagValues(args, "--approve")];
-    const relay = new Relay(createExecutor("codex-exec", config, args, bundle), new RuleBasedReviewer());
+    const executor = createExecutor("codex-exec", config, args, bundle);
+    const relay = new Relay(executor, new RuleBasedReviewer());
     const runHandle = await new RunStore(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory)).createRun(handoff);
     const result = await relay.run(handoff, {
       maxIterations: config.relay.maxIterations,
       approvedGateIds: approvals,
       runHandle,
     });
-    print(result);
+    const finalModelSelection = executor instanceof CodexExecExecutor
+      ? executor.finalModelSelection ?? bundle?.selection ?? null
+      : bundle?.selection ?? null;
+    print({ ...result, executionOwner: "Codex", modelSelection: finalModelSelection });
     if (result.status !== "COMPLETED") process.exitCode = 4;
     return;
   }

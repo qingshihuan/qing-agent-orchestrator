@@ -40,11 +40,13 @@ CLI 只能使用本机已配置并通过最小健康检查的候选。Planner �
 
 配置接受 backend、model、可选 CLI profile、精确 reasoningEffort、availability、roles、routes、categories、complexityBands、tags、priority、enabled、fallbacks。CLI 文档当前确认 `minimal|low|medium|high|xhigh`，因此即使桌面主机对部分模型公布 `max/ultra`，Relay 也不会把它们发送给 CLI。配置按 model/backend 精确校验，拒绝跨后端 fallback、provider URL、token、secret 和未知字段。
 
+健康检查失败，或真实调用错误明确点名当前所选 model ID 并说明 unknown、account/entitlement 不支持、metadata not found 或 unavailable 时，只能沿配置的显式同后端链继续；无健康安全候选则失败关闭。选择事件保存 `executionOwner: Codex`、planned/actual pair、fallback reason、链和尝试，并用 `scopeProofComplete` 证明操作、安全与权限范围是否未变。同后端且完整证明 operations、allowedPaths、sandbox、permissions、effects 均不变时不新增 gate；证明缺失/不完整、跨后端或任一范围变化必须停止并重新审批。此规则同样适用于 high-risk band，不会削弱 Handoff 或操作 gate。
+
 CLI 可配置 `gpt-5.6`（通用模型指导中该 alias 指向 `gpt-5.6-sol`），推荐候选 ID 为 `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` 和 `gpt-5.3-codex-spark`。是否实际可用取决于本机版本、账户和 entitlement；只有最小预检健康的候选能被选择。当前订阅访问不应被解释为 Responses API entitlement，本实现也没有 API adapter。
 
 ## 进程协议
 
-适配器使用参数数组且 shell=false，通过 stdin 发送提示，要求 JSONL 和严格最终 Schema。仅允许 read-only 或 workspace-write，设置时间/输出上限并脱敏错误。
+适配器使用参数数组且 shell=false，通过 stdin 发送提示，要求 JSONL 和严格最终 Schema。仅允许 read-only 或 workspace-write，设置时间/输出上限并脱敏错误。真实执行回退按显式计划长度有界；每次尝试保持 prompt、workspace、sandbox、environment/permissions、output schema、timeout 和 output limit 完全一致，只改变已审计的 model/reasoning pair。同一 CLI profile 才能自动复用 gate。认证、spawn/进程、超时、取消、输出上限、协议、schema、跨后端或范围变化错误不重试。
 
 真实进程开始后 RunStore 记录 started、heartbeat、exited、phase、iteration、pid 和 elapsedMs。status、logs 和 cancel 从持久化状态工作。取消终态不得被后续退出事件覆盖。
 

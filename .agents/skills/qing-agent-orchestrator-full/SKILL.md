@@ -10,10 +10,10 @@ Use the desktop app normally. The optional process backend is an enhancement, no
 ## Default desktop workflow
 
 1. Resolve the exact project and classify the goal with [orchestrator-spec.md](references/orchestrator-spec.md).
-2. Keep advice in the parent and delegate executable work to an internal child task by default. Open a separate visible task only when explicitly requested or needed for observation/isolation.
+2. Keep advice in the parent and delegate executable work to an internal child task by default. Open a separate visible task only when explicitly requested or needed for observation/isolation. Set high-level `executionOwner` to exactly `ChatGPT` for chat/outer-parent answers and exactly `Codex` for Relay, internal-child, or CLI execution; do not substitute concrete tool names or a per-tool ledger.
 3. Score delegated work deterministically from category, role, risk, scope, and signals. Choose a capability-valid model/reasoning pair only for the delegated backend. For a desktop child, invoke `{ model, reasoning_effort }`; explicit spawn values override the configured subagent defaults. For the optional process backend, pass the selected model through `-m` and the documented reasoning setting. Never switch the current parent model.
 4. Create and present a structured Handoff using [handoff-protocol.md](references/handoff-protocol.md).
-5. Evaluate [safety-gates.md](references/safety-gates.md), wait for the exact Handoff and gate approvals, execute, then apply [reviewer-rules.md](references/reviewer-rules.md).
+5. Evaluate [safety-gates.md](references/safety-gates.md), wait for the exact Handoff and gate approvals, execute, then apply [reviewer-rules.md](references/reviewer-rules.md). Final reporting must disclose the high-level `ChatGPT`/`Codex` owner and the planned/actual model fallback audit, or state that no substitution occurred, without a concrete tool ledger.
 
 ## Optional CLI decision
 
@@ -40,4 +40,5 @@ Only after the accepted branch, successful dependency check, exact Handoff appro
 - Declining always returns to desktop execution.
 - The optional backend never bundles or impersonates a Codex executable.
 - Desktop availability is host-advertised; process-backend availability remains entitlement-dependent until the existing bounded health probe passes. Capability drift fails closed and only explicit same-backend fallback chains are allowed.
+- For ordinary and high-risk work alike, show the replacement model/reasoning pair and rejection reason before retrying or reactivating, then record planned and actual pairs plus chain/attempt context. Reuse existing gates only when a complete explicit scope proof confirms backend, operations, allowed paths, sandbox, permissions, and effects are unchanged; missing/incomplete proof or any change requires a fresh gate.
 - Preserve unrelated work, bounded revisions, evidence-based review, and visible progress.

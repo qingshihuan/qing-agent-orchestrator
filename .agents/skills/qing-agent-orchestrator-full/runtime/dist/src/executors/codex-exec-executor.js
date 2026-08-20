@@ -7,7 +7,8 @@ import { evaluateSandboxPreflight } from "../sandbox-preflight.js";
 import { inspectCodexRuntimeProvenance, resolveCompleteWindowsRuntime, } from "../codex-runtime.js";
 import { resolveSafeWorkspace } from "../workspace.js";
 import { modelSelectionArgs } from "../model-health.js";
-function failedResult(summary) {
+import { continueModelFallbackAfterRejection, ModelFallbackRequiresGateError, NoHealthyModelCandidateError, } from "../model-router.js";
+function failedResult(summary, modelFallbackAudit = null) {
     return {
         status: "failed",
         summary,
@@ -16,6 +17,8 @@ function failedResult(summary) {
         tests: [],
         proposedOperations: [],
         simulated: false,
+        executionOwner: "Codex",
+        modelFallbackAudit,
     };
 }
 export function redactSensitiveText(value) {
@@ -64,6 +67,67 @@ function processFailure(prefix, result) {
                 : "process failed";
     return `${prefix}: ${condition}. ${formatProcessDiagnostic(result)}`;
 }
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+export function modelRejectionReason(result, selection) {
+    if (result.exitCode === 0 || result.spawnError || result.timedOut || result.cancelled || result.outputLimitExceeded)
+        return null;
+    const text = redactSensitiveText(`${result.stderr}\n${result.stdout}`).trim();
+    if (!text)
+        return null;
+    if (/\b(?:authentication|not logged in|unauthorized|forbidden|credential|api[_ -]?key|permission denied|401|403)\b/i.test(text))
+        return null;
+    const forbiddenFailure = /\b(?:output\s+schema|response\s+schema|schema\s+(?:validation|parse|unsupported|invalid)|protocol|(?:worker\s+)?process\s+(?:crash(?:ed)?|fail(?:ed|ure)?|error|exit(?:ed)?|spawn)|spawn(?:ed|ing)?|timed?\s*out|timeout|cancel(?:led|ed)|output\s+(?:limit|size)|ordinary\s+task\s+error|generated\s+documentation)\b/i;
+    if (forbiddenFailure.test(text))
+        return null;
+    const escapedModel = escapeRegExp(selection.model);
+    const selectedModel = `(?<![A-Za-z0-9._-])${escapedModel}(?![A-Za-z0-9_-]|\\.[A-Za-z0-9_-])`;
+    if (!new RegExp(selectedModel, "i").test(text))
+        return null;
+    const selectedModelToken = `["'\u0060]?${selectedModel}["'\u0060]?`;
+    const prefix = `(?:error:\\s*)?`;
+    const suffix = `[.!]?`;
+    const modelFailurePatterns = [
+        new RegExp(`^${prefix}(?:unknown|invalid)\\s+model\\s+${selectedModelToken}${suffix}$`, "i"),
+        new RegExp(`^${prefix}(?:the\\s+)?(?:(?:requested|selected|specified)\\s+)?model\\s+${selectedModelToken}\\s+(?:is\\s+|was\\s+)?(?:unavailable|not available|unknown|not found|does not exist)(?:\\s+for\\s+this\\s+(?:invocation|request))?${suffix}$`, "i"),
+        new RegExp(`^${prefix}model\\s+metadata\\s+for\\s+${selectedModelToken}\\s+(?:is\\s+|was\\s+)?not found${suffix}$`, "i"),
+        new RegExp(`^${prefix}model\\s+metadata\\s+(?:is\\s+|was\\s+)?not found\\s+for\\s+${selectedModelToken}${suffix}$`, "i"),
+        new RegExp(`^${prefix}(?:you\\s+)?(?:do not have access|are not allowed to use|not allowed to use)\\s+(?:the\\s+)?(?:model\\s+)?${selectedModelToken}${suffix}$`, "i"),
+        new RegExp(`^${prefix}(?:the\\s+)?model\\s+${selectedModelToken}\\s+(?:is\\s+|was\\s+)?not supported\\s+(?:with|by|for)\\s+(?:your\\s+)?(?:chatgpt\\s+)?(?:account|plan|entitlement|subscription|workspace)${suffix}$`, "i"),
+    ];
+    const modelFailure = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .some((line) => modelFailurePatterns.some((pattern) => pattern.test(line)));
+    return modelFailure ? `Runtime model rejection/unavailability: ${boundedHeadAndTail(text, 600)}` : null;
+}
+function modelSelectionPayload(selection) {
+    return {
+        executionOwner: "Codex",
+        candidateId: selection.candidateId,
+        backend: selection.backend,
+        model: selection.model,
+        profile: selection.profile,
+        reasoningEffort: selection.reasoningEffort,
+        availability: selection.availability,
+        role: selection.role,
+        complexityBand: selection.complexityBand,
+        reason: selection.reason,
+        cacheState: selection.cacheState,
+        fallbackFrom: selection.fallbackFrom,
+        fallbackPlan: selection.fallbackPlan,
+        fallbackAudit: selection.fallbackAudit,
+    };
+}
+const verifiedRuntimeScope = {
+    operationsUnchanged: true,
+    allowedPathsUnchanged: true,
+    sandboxUnchanged: true,
+    permissionsUnchanged: true,
+    effectsUnchanged: true,
+};
 function pathIsInside(base, target) {
     const relation = relative(base, target);
     return relation === "" || (!relation.startsWith("..") && !isAbsolute(relation));
@@ -138,10 +202,15 @@ export class CodexExecExecutor {
     inspectRuntime;
     name = "codex-exec";
     probePromise;
+    activeModelSelection;
     constructor(options, runner = new NodeProcessRunner(), inspectRuntime = inspectCodexRuntimeProvenance) {
         this.options = options;
         this.runner = runner;
         this.inspectRuntime = inspectRuntime;
+        this.activeModelSelection = options.modelSelection;
+    }
+    get finalModelSelection() {
+        return this.activeModelSelection;
     }
     doctor(force = false) {
         if (force || !this.probePromise)
@@ -173,13 +242,22 @@ export class CodexExecExecutor {
         };
     }
     async execute(handoff, context) {
-        let selectedModelArgs = [];
         try {
-            if (this.options.modelSelection)
-                selectedModelArgs = modelSelectionArgs(this.options.modelSelection);
+            if (this.activeModelSelection) {
+                modelSelectionArgs(this.activeModelSelection);
+                for (const candidate of this.activeModelSelection.fallbackPlan.orderedCandidates) {
+                    modelSelectionArgs(candidate);
+                    if (candidate.backend !== this.activeModelSelection.backend) {
+                        throw new ModelFallbackRequiresGateError("Codex runtime fallback cannot cross model backends without a fresh gate.");
+                    }
+                    if (candidate.profile !== this.activeModelSelection.profile) {
+                        throw new ModelFallbackRequiresGateError("Codex runtime fallback cannot change CLI profiles while claiming sandbox and permissions are unchanged.");
+                    }
+                }
+            }
         }
         catch (error) {
-            return failedResult(`Codex model selection was rejected before process creation: ${error instanceof Error ? error.message : String(error)}`);
+            return failedResult(`Codex model selection was rejected before process creation: ${error instanceof Error ? error.message : String(error)}`, this.activeModelSelection?.fallbackAudit ?? null);
         }
         for (const record of this.options.modelHealth ?? []) {
             context.onModelEvent?.("model.preflight", {
@@ -190,22 +268,8 @@ export class CodexExecExecutor {
                 reason: redactSensitiveText(record.reason),
             });
         }
-        if (this.options.modelSelection) {
-            context.onModelEvent?.("model.selected", {
-                candidateId: this.options.modelSelection.candidateId,
-                backend: this.options.modelSelection.backend,
-                model: this.options.modelSelection.model,
-                profile: this.options.modelSelection.profile,
-                reasoningEffort: this.options.modelSelection.reasoningEffort,
-                availability: this.options.modelSelection.availability,
-                role: this.options.modelSelection.role,
-                complexityBand: this.options.modelSelection.complexityBand,
-                invocation: { modelFlag: "-m", reasoningConfig: "model_reasoning_effort" },
-                reason: this.options.modelSelection.reason,
-                cacheState: this.options.modelSelection.cacheState,
-                fallbackFrom: this.options.modelSelection.fallbackFrom,
-            });
-        }
+        if (this.activeModelSelection)
+            context.onModelEvent?.("model.selected", modelSelectionPayload(this.activeModelSelection));
         let base;
         let workspace;
         let schemaPath;
@@ -289,71 +353,119 @@ export class CodexExecExecutor {
         }
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "qing-relay-"));
         const outputPath = join(temporaryDirectory, "executor-result.json");
-        const args = [
-            "exec",
-            "--json",
-            "--sandbox",
-            sandbox,
-            "--output-schema",
-            schemaPath,
-            "--output-last-message",
-            outputPath,
-        ];
-        args.push(...selectedModelArgs);
-        if (this.options.ephemeral)
-            args.push("--ephemeral");
-        if (this.options.ignoreUserConfig)
-            args.push("--ignore-user-config");
-        if (platform === "win32" && this.options.windowsSandbox) {
-            args.push("-c", `windows.sandbox=\"${this.options.windowsSandbox}\"`);
-        }
-        if (isStrictReadOnlyDiagnostic(handoff, sandbox))
-            args.push("--skip-git-repo-check");
-        args.push("-");
         try {
-            const request = {
-                command: selectedCommand,
-                args,
-                cwd: workspace,
-                stdin: buildCodexPrompt(handoff, context),
-                timeoutMs: this.options.timeoutMs,
-                maxOutputBytes: this.options.maxOutputBytes,
-                environment: childEnvironment,
-                ...(context.onProcessStart ? { onStart: context.onProcessStart } : {}),
-                ...(context.onProcessExit ? { onExit: context.onProcessExit } : {}),
-                ...(context.onProcessHandle ? { onHandle: context.onProcessHandle } : {}),
-            };
-            const result = this.runner.start
-                ? await (() => {
-                    const handle = this.runner.start(request);
+            const prompt = buildCodexPrompt(handoff, context);
+            let attemptNumber = 0;
+            while (true) {
+                attemptNumber += 1;
+                const args = [
+                    "exec",
+                    "--json",
+                    "--sandbox",
+                    sandbox,
+                    "--output-schema",
+                    schemaPath,
+                    "--output-last-message",
+                    outputPath,
+                ];
+                if (this.activeModelSelection)
+                    args.push(...modelSelectionArgs(this.activeModelSelection));
+                if (this.options.ephemeral)
+                    args.push("--ephemeral");
+                if (this.options.ignoreUserConfig)
+                    args.push("--ignore-user-config");
+                if (platform === "win32" && this.options.windowsSandbox) {
+                    args.push("-c", `windows.sandbox=\"${this.options.windowsSandbox}\"`);
+                }
+                if (isStrictReadOnlyDiagnostic(handoff, sandbox))
+                    args.push("--skip-git-repo-check");
+                args.push("-");
+                if (this.activeModelSelection) {
+                    context.onModelEvent?.("model.attempt", {
+                        ...modelSelectionPayload(this.activeModelSelection),
+                        attemptNumber,
+                    });
+                }
+                const request = {
+                    command: selectedCommand,
+                    args,
+                    cwd: workspace,
+                    stdin: prompt,
+                    timeoutMs: this.options.timeoutMs,
+                    maxOutputBytes: this.options.maxOutputBytes,
+                    environment: childEnvironment,
+                    ...(context.onProcessStart ? { onStart: context.onProcessStart } : {}),
+                    ...(context.onProcessExit ? { onExit: context.onProcessExit } : {}),
+                    ...(context.onProcessHandle ? { onHandle: context.onProcessHandle } : {}),
+                };
+                const result = this.runner.start
+                    ? await (() => {
+                        const handle = this.runner.start(request);
+                        try {
+                            context.onProcessHandle?.(handle);
+                        }
+                        catch {
+                            // Relay observability must not affect execution.
+                        }
+                        return handle.result;
+                    })()
+                    : await this.runner.run(request);
+                if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded) {
+                    const rejectionReason = this.activeModelSelection ? modelRejectionReason(result, this.activeModelSelection) : null;
+                    if (!rejectionReason || !this.activeModelSelection) {
+                        return failedResult(processFailure("codex exec failed", result), this.activeModelSelection?.fallbackAudit ?? null);
+                    }
+                    const rejected = this.activeModelSelection;
                     try {
-                        context.onProcessHandle?.(handle);
+                        const replacement = continueModelFallbackAfterRejection(rejected, rejected.candidateId, rejectionReason, verifiedRuntimeScope);
+                        context.onModelEvent?.("model.rejected", {
+                            executionOwner: "Codex",
+                            rejectedPair: rejected.fallbackAudit.actualPair,
+                            reason: rejectionReason,
+                            fallbackAudit: replacement.fallbackAudit,
+                        });
+                        this.activeModelSelection = replacement;
+                        context.onModelEvent?.("model.fallback", modelSelectionPayload(replacement));
+                        context.onModelEvent?.("model.selected", modelSelectionPayload(replacement));
+                        continue;
                     }
-                    catch {
-                        // Relay observability must not affect execution.
+                    catch (error) {
+                        if (error instanceof ModelFallbackRequiresGateError || error instanceof NoHealthyModelCandidateError) {
+                            if (error.fallbackAudit) {
+                                this.activeModelSelection = { ...rejected, fallbackAudit: error.fallbackAudit };
+                            }
+                            context.onModelEvent?.("model.rejected", {
+                                executionOwner: "Codex",
+                                rejectedPair: rejected.fallbackAudit.actualPair,
+                                reason: rejectionReason,
+                                fallbackAudit: error.fallbackAudit ?? rejected.fallbackAudit,
+                            });
+                            return failedResult(`${error.message} ${processFailure("codex exec rejected the model pair", result)}`, error.fallbackAudit ?? rejected.fallbackAudit);
+                        }
+                        throw error;
                     }
-                    return handle.result;
-                })()
-                : await this.runner.run(request);
-            if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded) {
-                return failedResult(processFailure("codex exec failed", result));
+                }
+                const jsonlError = validateJsonl(result.stdout);
+                if (jsonlError)
+                    return failedResult(`codex exec protocol error: ${jsonlError}`, this.activeModelSelection?.fallbackAudit ?? null);
+                let parsed;
+                try {
+                    parsed = JSON.parse(await readFile(outputPath, "utf8"));
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    return failedResult(`codex exec final output was missing or invalid JSON: ${redactSensitiveText(message)}`, this.activeModelSelection?.fallbackAudit ?? null);
+                }
+                const validation = validateExecutionResult(parsed);
+                if (!validation.ok || !validation.value) {
+                    return failedResult(`codex exec final output failed validation: ${validation.errors.join("; ")}`, this.activeModelSelection?.fallbackAudit ?? null);
+                }
+                return {
+                    ...validation.value,
+                    executionOwner: "Codex",
+                    modelFallbackAudit: this.activeModelSelection?.fallbackAudit ?? null,
+                };
             }
-            const jsonlError = validateJsonl(result.stdout);
-            if (jsonlError)
-                return failedResult(`codex exec protocol error: ${jsonlError}`);
-            let parsed;
-            try {
-                parsed = JSON.parse(await readFile(outputPath, "utf8"));
-            }
-            catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                return failedResult(`codex exec final output was missing or invalid JSON: ${redactSensitiveText(message)}`);
-            }
-            const validation = validateExecutionResult(parsed);
-            if (!validation.ok || !validation.value) {
-                return failedResult(`codex exec final output failed validation: ${validation.errors.join("; ")}`);
-            }
-            return validation.value;
         }
         finally {
             await rm(temporaryDirectory, { recursive: true, force: true });

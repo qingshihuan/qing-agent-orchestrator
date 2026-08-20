@@ -14,6 +14,73 @@ import {
   resolveCompleteWindowsRuntime,
   type CodexRuntimeProvenance,
 } from "../src/codex-runtime.js";
+import type { ModelSelection } from "../src/types.js";
+
+function selectedModel(overrides: Partial<ModelSelection> = {}): ModelSelection {
+  const plannedPair = { candidateId: "executor-primary", backend: "codex-cli" as const, model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high" as const };
+  return {
+    executionOwner: "Codex",
+    ...plannedPair,
+    availability: "entitlement-dependent",
+    role: "executor",
+    complexityBand: "complex",
+    reason: "healthy",
+    cacheState: "fresh",
+    fallbackFrom: null,
+    fallbackPlan: {
+      strategy: "completion-first-explicit-chain",
+      orderedCandidates: [{ ...plannedPair, availability: "entitlement-dependent", observedState: "healthy", cacheState: "fresh" }],
+      sameBackendOnly: true,
+      noImplicitFallthrough: true,
+    },
+    fallbackAudit: {
+      plannedPair,
+      actualPair: plannedPair,
+      fallbackReason: null,
+      chain: [plannedPair.candidateId],
+      attempts: [{ candidate: plannedPair, outcome: "selected", reason: "fixture" }],
+      gateAssessment: {
+        backendUnchanged: true,
+        scopeProofComplete: true,
+        operationsUnchanged: true,
+        allowedPathsUnchanged: true,
+        sandboxUnchanged: true,
+        permissionsUnchanged: true,
+        effectsUnchanged: true,
+        securityScopeUnchanged: true,
+        requiresNewGate: false,
+        reasons: [],
+      },
+      executionOwner: "Codex",
+    },
+    ...overrides,
+  };
+}
+
+function selectedModelWithFallback(): ModelSelection {
+  const primary = selectedModel();
+  const fallback = {
+    candidateId: "executor-fallback",
+    backend: "codex-cli" as const,
+    model: "gpt-5.6-terra",
+    profile: "work",
+    reasoningEffort: "high" as const,
+  };
+  return {
+    ...primary,
+    fallbackPlan: {
+      ...primary.fallbackPlan,
+      orderedCandidates: [
+        primary.fallbackPlan.orderedCandidates[0]!,
+        { ...fallback, availability: "entitlement-dependent", observedState: "healthy", cacheState: "fresh" },
+      ],
+    },
+    fallbackAudit: {
+      ...primary.fallbackAudit,
+      chain: [primary.candidateId, fallback.candidateId],
+    },
+  };
+}
 
 test("complete Windows runtime selection skips WindowsApps and prepends only the child PATH", async () => {
   const root = await mkdtemp(join(tmpdir(), "qing-runtime-select-"));
@@ -142,6 +209,7 @@ class FakeCodexRunner implements ProcessRunner {
     private readonly handoff: Handoff,
     private readonly authenticated = true,
     private readonly invalidFinalOutput = false,
+    private readonly executionResults: ProcessResult[] = [],
   ) {}
 
   async run(request: ProcessRequest): Promise<ProcessResult> {
@@ -153,14 +221,33 @@ class FakeCodexRunner implements ProcessRunner {
         : processResult({ exitCode: 1, stderr: "Not logged in\n" });
     }
 
+    const queued = this.executionResults.shift();
+    if (queued && (queued.exitCode !== 0 || queued.spawnError || queued.timedOut || queued.outputLimitExceeded)) return queued;
     const outputFlag = request.args.indexOf("--output-last-message");
     const outputPath = request.args[outputFlag + 1];
     assert.ok(outputPath);
     await writeFile(outputPath, this.invalidFinalOutput ? "{}" : JSON.stringify(successfulExecution(this.handoff)), "utf8");
-    return processResult({
+    return queued ?? processResult({
       stdout: '{"type":"thread.started","thread_id":"fake"}\n{"type":"turn.completed"}\n',
     });
   }
+}
+
+function argsWithoutModelPair(args: string[]): string[] {
+  const result: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index]!;
+    if (value === "-m" || value === "--profile") {
+      index += 1;
+      continue;
+    }
+    if (value === "-c" && /^model_reasoning_effort=/.test(args[index + 1] ?? "")) {
+      index += 1;
+      continue;
+    }
+    result.push(value);
+  }
+  return result;
 }
 
 function options(): CodexExecOptions {
@@ -247,7 +334,7 @@ test("executor propagates the selected model without changing security arguments
   const events: Array<{ type: string; value: Record<string, unknown> }> = [];
   const execution = await new CodexExecExecutor({
     ...options(),
-    modelSelection: { candidateId: "executor-primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent", role: "executor", complexityBand: "complex", reason: "healthy", cacheState: "fresh", fallbackFrom: null },
+    modelSelection: selectedModel(),
     modelHealth: [{ candidateId: "executor-primary", fingerprint: "hash", cliVersion: "codex 1", state: "healthy", cacheState: "fresh", checkedAt: "2026-01-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", failure: null, reason: "passed" }],
   }, fake).execute(handoff, { iteration: 1, revisionInstructions: [], onModelEvent: (type, value) => events.push({ type, value }) });
   assert.equal(execution.status, "succeeded");
@@ -257,13 +344,143 @@ test("executor propagates the selected model without changing security arguments
   assert.equal(args[args.lastIndexOf("-c") + 1], 'model_reasoning_effort="high"');
   assert.equal(args[args.indexOf("--sandbox") + 1], "workspace-write");
   assert.ok(args.includes("--output-schema")); assert.ok(args.includes("--ephemeral")); assert.ok(args.includes("--ignore-user-config"));
-  assert.deepEqual(events.map(({ type }) => type), ["model.preflight", "model.selected"]);
+  assert.deepEqual(events.map(({ type }) => type), ["model.preflight", "model.selected", "model.attempt"]);
+  assert.deepEqual((events[1]!.value.fallbackAudit as ModelSelection["fallbackAudit"]).plannedPair, selectedModel().fallbackAudit.plannedPair);
+  assert.equal((events[1]!.value.fallbackAudit as ModelSelection["fallbackAudit"]).gateAssessment.requiresNewGate, false);
+  assert.equal(events[1]!.value.executionOwner, "Codex");
+  assert.equal(execution.executionOwner, "Codex");
+});
+
+test("runtime model rejection retries the next explicit candidate with identical security scope and returns the final audit", async () => {
+  const handoff = await exampleHandoff();
+  const fake = new FakeCodexRunner(handoff, true, false, [
+    processResult({ exitCode: 1, stderr: "Requested model gpt-5.6-sol is unavailable for this invocation." }),
+    processResult({ stdout: '{"type":"thread.started","thread_id":"fallback"}\n{"type":"turn.completed"}\n' }),
+  ]);
+  const events: Array<{ type: string; value: Record<string, unknown> }> = [];
+  const executor = new CodexExecExecutor({ ...options(), modelSelection: selectedModelWithFallback() }, fake);
+  const execution = await executor.execute(handoff, {
+    iteration: 1,
+    revisionInstructions: [],
+    onModelEvent: (type, value) => events.push({ type, value }),
+  });
+  assert.equal(execution.status, "succeeded");
+  assert.equal(execution.executionOwner, "Codex");
+  assert.equal(execution.modelFallbackAudit?.executionOwner, "Codex");
+  assert.equal(execution.modelFallbackAudit?.plannedPair.candidateId, "executor-primary");
+  assert.equal(execution.modelFallbackAudit?.actualPair.candidateId, "executor-fallback");
+  assert.match(execution.modelFallbackAudit?.fallbackReason ?? "", /unavailable/);
+  assert.deepEqual(execution.modelFallbackAudit?.attempts.map(({ outcome }) => outcome), ["rejected", "selected"]);
+  assert.equal(execution.modelFallbackAudit?.gateAssessment.scopeProofComplete, true);
+  assert.equal(execution.modelFallbackAudit?.gateAssessment.requiresNewGate, false);
+  assert.equal(executor.finalModelSelection?.candidateId, "executor-fallback");
+
+  const [primaryRequest, fallbackRequest] = fake.requests.slice(2);
+  assert.ok(primaryRequest && fallbackRequest);
+  assert.equal(primaryRequest.command, fallbackRequest.command);
+  assert.equal(primaryRequest.cwd, fallbackRequest.cwd);
+  assert.equal(primaryRequest.stdin, fallbackRequest.stdin);
+  assert.equal(primaryRequest.timeoutMs, fallbackRequest.timeoutMs);
+  assert.equal(primaryRequest.maxOutputBytes, fallbackRequest.maxOutputBytes);
+  assert.deepEqual(primaryRequest.environment, fallbackRequest.environment);
+  assert.deepEqual(argsWithoutModelPair(primaryRequest.args), argsWithoutModelPair(fallbackRequest.args));
+  assert.equal(fallbackRequest.args[fallbackRequest.args.indexOf("-m") + 1], "gpt-5.6-terra");
+  assert.deepEqual(events.map(({ type }) => type), [
+    "model.selected",
+    "model.attempt",
+    "model.rejected",
+    "model.fallback",
+    "model.selected",
+    "model.attempt",
+  ]);
+});
+
+test("runtime model rejection chain exhaustion fails closed with every attempt disclosed", async () => {
+  const handoff = await exampleHandoff();
+  const fake = new FakeCodexRunner(handoff, true, false, [
+    processResult({ exitCode: 1, stderr: "Model gpt-5.6-sol is unavailable." }),
+    processResult({ exitCode: 1, stderr: "Model gpt-5.6-terra is unavailable." }),
+  ]);
+  const execution = await new CodexExecExecutor({ ...options(), modelSelection: selectedModelWithFallback() }, fake)
+    .execute(handoff, { iteration: 1, revisionInstructions: [] });
+  assert.equal(execution.status, "failed");
+  assert.match(execution.summary, /chain exhausted/i);
+  assert.equal(fake.requests.length, 4);
+  assert.deepEqual(execution.modelFallbackAudit?.attempts.map(({ outcome }) => outcome), ["rejected", "rejected"]);
+  assert.equal(execution.modelFallbackAudit?.actualPair.candidateId, "executor-fallback");
+});
+
+test("explicit selected-model identifier, entitlement, and metadata rejection can use the bounded fallback", async () => {
+  const handoff = await exampleHandoff();
+  for (const message of [
+    "Unknown model 'gpt-5.6-sol'.",
+    "Unknown model gpt-5.6-sol.",
+    "The model 'gpt-5.6-sol' is not supported with your ChatGPT account.",
+    "Model metadata not found for 'gpt-5.6-sol'.",
+    "Model metadata not found for gpt-5.6-sol.",
+    "Error details:\nUnknown model 'gpt-5.6-sol'.",
+    "Error details:\r\nModel metadata not found for gpt-5.6-sol.",
+  ]) {
+    const fake = new FakeCodexRunner(handoff, true, false, [
+      processResult({ exitCode: 1, stderr: message }),
+      processResult({ stdout: '{"type":"thread.started","thread_id":"fallback"}\n{"type":"turn.completed"}\n' }),
+    ]);
+    const selectedAttempts: string[] = [];
+    const execution = await new CodexExecExecutor({ ...options(), modelSelection: selectedModelWithFallback() }, fake)
+      .execute(handoff, {
+        iteration: 1,
+        revisionInstructions: [],
+        onModelEvent: (type, value) => {
+          if (type === "model.attempt") selectedAttempts.push(String(value.candidateId));
+        },
+      });
+    assert.equal(execution.status, "succeeded", message);
+    assert.equal(execution.modelFallbackAudit?.actualPair.candidateId, "executor-fallback", message);
+    assert.equal(fake.requests.filter(({ args }) => args[0] === "exec").length, 2, message);
+    assert.deepEqual(selectedAttempts, ["executor-primary", "executor-fallback"], message);
+    assert.deepEqual(execution.modelFallbackAudit?.attempts.map(({ outcome }) => outcome), ["rejected", "selected"], message);
+  }
+});
+
+test("schema, protocol, authentication, process, timeout, cancellation, output-limit, and ordinary errors never retry", async () => {
+  const handoff = await exampleHandoff();
+  for (const failure of [
+    processResult({ exitCode: 1, stderr: "Invalid output schema for model response." }),
+    processResult({ exitCode: 1, stderr: "Model output schema unsupported by server." }),
+    processResult({ exitCode: 1, stderr: "Invalid protocol message returned by model worker." }),
+    processResult({ exitCode: 1, stderr: "Invalid output schema for model gpt-5.6-sol response." }),
+    processResult({ exitCode: 1, stderr: "Model output schema unsupported by server for gpt-5.6-sol." }),
+    processResult({ exitCode: 1, stderr: "Model gpt-5.6-sol is not supported for output schema." }),
+    processResult({ exitCode: 1, stderr: "Invalid protocol message returned by model gpt-5.6-sol worker." }),
+    processResult({ exitCode: 1, stderr: "Protocol error: selected model gpt-5.6-sol is unavailable." }),
+    processResult({ exitCode: 1, stderr: "Output schema validation failed: unknown model gpt-5.6-sol field." }),
+    processResult({ exitCode: 1, stderr: "Worker process crashed; model gpt-5.6-sol is unavailable." }),
+    processResult({ exitCode: 1, stderr: "Ordinary task error: model gpt-5.6-sol is unavailable in generated documentation." }),
+    processResult({ exitCode: 1, stderr: "Selected identifier: gpt-5.6-sol\nModel metadata not found." }),
+    processResult({ exitCode: 1, stderr: "Unknown model gpt-5.6-terra." }),
+    processResult({ exitCode: 1, stderr: "Unknown model gpt-5.6-sol.foo." }),
+    processResult({ exitCode: 1, stderr: "Model metadata not found for gpt-5.6-sol-extra." }),
+    processResult({ exitCode: 1, stderr: "401 Unauthorized: authentication token expired" }),
+    processResult({ exitCode: null, spawnError: "spawn ENOENT" }),
+    processResult({ exitCode: null, timedOut: true, stderr: "Timed out" }),
+    processResult({ exitCode: null, cancelled: true, stderr: "Cancelled" }),
+    processResult({ exitCode: null, outputLimitExceeded: true, stderr: "Output limit exceeded" }),
+    processResult({ exitCode: 1, stderr: "Worker process crashed while opening the workspace" }),
+  ]) {
+    const fake = new FakeCodexRunner(handoff, true, false, [failure]);
+    const execution = await new CodexExecExecutor({ ...options(), modelSelection: selectedModelWithFallback() }, fake)
+      .execute(handoff, { iteration: 1, revisionInstructions: [] });
+    assert.equal(execution.status, "failed");
+    assert.equal(fake.requests.filter(({ args }) => args[0] === "exec").length, 1, failure.stderr || failure.spawnError || "failure");
+    assert.equal(execution.modelFallbackAudit?.actualPair.candidateId, "executor-primary");
+    assert.deepEqual(execution.modelFallbackAudit?.attempts.map(({ outcome }) => outcome), ["selected"]);
+  }
 });
 
 test("executor rejects unsafe model selection before any process request", async () => {
   const handoff = await exampleHandoff();
   const fake = new FakeCodexRunner(handoff);
-  const execution = await new CodexExecExecutor({ ...options(), modelSelection: { candidateId: "bad", backend: "codex-cli", model: "good; calc", profile: null, reasoningEffort: "high", availability: "entitlement-dependent", role: "executor", complexityBand: "normal", reason: "fixture", cacheState: "fresh", fallbackFrom: null } }, fake).execute(handoff, { iteration: 1, revisionInstructions: [] });
+  const execution = await new CodexExecExecutor({ ...options(), modelSelection: selectedModel({ candidateId: "bad", model: "good; calc", profile: null, complexityBand: "normal", reason: "fixture" }) }, fake).execute(handoff, { iteration: 1, revisionInstructions: [] });
   assert.equal(execution.status, "failed"); assert.match(execution.summary, /before process creation/);
   assert.equal(fake.requests.length, 0);
 });

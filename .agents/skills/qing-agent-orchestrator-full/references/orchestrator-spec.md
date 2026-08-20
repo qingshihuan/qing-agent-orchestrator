@@ -10,6 +10,8 @@
 
 Use advice, analysis, code_change, content_creation, infrastructure, external_action, or mixed. Split materially different effects into ordered Handoffs.
 
-Before selecting a delegated model, record an explainable score and trivial/normal/complex/high-risk band from category, role, risk, scope, and signals. Bind every candidate to desktop-child or codex-cli and validate its exact model/reasoning pair before invocation; the outer parent remains unchanged.
+Expose one high-level execution owner: `ChatGPT` for a chat route answered by the outer parent, otherwise `Codex` for Relay, internal-child, or CLI execution. Do not replace this label with concrete tool names or a per-tool ledger.
+
+Before selecting a delegated model, record an explainable score and trivial/normal/complex/high-risk band from category, role, risk, scope, and signals. Bind every candidate to desktop-child or codex-cli and validate its exact model/reasoning pair before invocation; the outer parent remains unchanged. Publish an ordered explicit same-backend fallback plan. After a real rejection, show the next capability-valid replacement and reason before retry/reactivation and require a complete unchanged-scope proof; never fall through to an unrelated candidate.
 
 The user approves the exact displayed Handoff ID. Any newly discovered target, dependency, permission, credential, network host, deletion, or remote action returns to safety gating.

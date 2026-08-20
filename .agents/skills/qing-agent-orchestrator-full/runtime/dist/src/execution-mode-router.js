@@ -65,6 +65,7 @@ export function routeExecutionMode(text, edition, taskRoute) {
         }
         : null;
     return {
+        executionOwner: taskRoute === "chat" || delegationTarget === "outer-session" ? "ChatGPT" : "Codex",
         edition,
         mode: recommendation ? "cli-recommended" : "desktop-native",
         delegationTarget,

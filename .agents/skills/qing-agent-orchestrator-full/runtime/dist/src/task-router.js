@@ -70,12 +70,12 @@ export function routeTask(text, options = {}) {
     const execution = routeExecutionMode(task, options.edition ?? "full", route);
     const complexity = analyzeTaskComplexity({ text: task, category, role: "planner", routeSignals: signals });
     return {
+        executionOwner: execution.executionOwner,
         route,
         confidence: signals.length === 0 ? "low" : materiallyMixed || signals.length === 1 ? "high" : "medium",
         category,
         reasons,
         signals,
-        responseOwner: route === "chat" ? "outer-session" : "relay",
         execution,
         complexity,
     };

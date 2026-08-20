@@ -16,16 +16,22 @@ test("standard and ordinary full tasks stay desktop-native", () => {
       assert.equal(decision.recommendation, null);
       assert.equal(decision.currentParentModelUnchanged, true);
       assert.equal(decision.modelSelectionScope, "delegated-task");
+      assert.equal(decision.executionOwner, route === "chat" ? "ChatGPT" : "Codex");
     }
   }
 });
 
 test("desktop delegation defaults internal, direct chat stays parent, and explicit visible tasks stay separate", () => {
-  assert.equal(routeExecutionMode("实现功能", "full", "codex").delegationTarget, "internal-child");
-  assert.equal(routeExecutionMode("解释概念", "full", "chat").delegationTarget, "outer-session");
+  const delegated = routeExecutionMode("实现功能", "full", "codex");
+  assert.equal(delegated.delegationTarget, "internal-child");
+  assert.equal(delegated.executionOwner, "Codex");
+  const chat = routeExecutionMode("解释概念", "full", "chat");
+  assert.equal(chat.delegationTarget, "outer-session");
+  assert.equal(chat.executionOwner, "ChatGPT");
   const visible = routeExecutionMode("新开任务实现功能", "full", "codex");
   assert.equal(visible.delegationTarget, "visible-task");
   assert.equal(visible.returnsToParent, false);
+  assert.equal(visible.executionOwner, "Codex");
 });
 
 test("only bounded full-edition conditions recommend CLI", () => {
@@ -77,6 +83,7 @@ test("declining never inspects dependencies and deterministically falls back to 
   const declined = await respondToCliRecommendation(pending, "decline", { inspect: async () => { calls += 1; return "ready"; } });
   assert.equal(calls, 0);
   assert.equal(declined.mode, "desktop-fallback");
+  assert.equal(declined.executionOwner, "Codex");
   assert.equal(declined.recommendation?.response, "declined");
   assert.equal(declined.suppressCliPromptForTask, true);
   assert.equal(declined.limitations.length, 1);

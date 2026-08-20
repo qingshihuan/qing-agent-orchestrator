@@ -12,6 +12,7 @@ export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type SandboxMode = "read-only" | "workspace-write";
 export type WindowsSandboxMode = "unelevated" | "elevated";
 export type TaskRoute = "chat" | "codex" | "hybrid";
+export type ExecutionOwner = "ChatGPT" | "Codex";
 export type OrchestratorEdition = "standard" | "full";
 export type DelegationTarget = "outer-session" | "internal-child" | "visible-task";
 export type ExecutionMode =
@@ -42,6 +43,7 @@ export interface CliRecommendation {
 }
 
 export interface ExecutionModeDecision {
+  executionOwner: ExecutionOwner;
   edition: OrchestratorEdition;
   mode: ExecutionMode;
   delegationTarget: DelegationTarget;
@@ -84,7 +86,61 @@ export interface ModelRoutingConfig {
   candidates: ModelCandidate[];
 }
 
+export interface ModelPair {
+  candidateId: string;
+  backend: ModelBackend;
+  model: string;
+  profile: string | null;
+  reasoningEffort: ModelReasoningEffort;
+}
+
+export interface ModelFallbackPlanCandidate extends ModelPair {
+  availability: ModelAvailability;
+  observedState: "host-advertised" | ModelHealthState;
+  cacheState: "fresh" | "cached" | null;
+}
+
+export interface ModelFallbackPlan {
+  strategy: "completion-first-explicit-chain";
+  orderedCandidates: ModelFallbackPlanCandidate[];
+  sameBackendOnly: true;
+  noImplicitFallthrough: true;
+}
+
+export interface ModelFallbackAttempt {
+  candidate: ModelPair;
+  outcome: "selected" | "unavailable" | "rejected";
+  reason: string;
+}
+
+export interface ModelFallbackScopeProof {
+  operationsUnchanged: boolean;
+  allowedPathsUnchanged: boolean;
+  sandboxUnchanged: boolean;
+  permissionsUnchanged: boolean;
+  effectsUnchanged: boolean;
+}
+
+export interface ModelFallbackGateAssessment extends ModelFallbackScopeProof {
+  backendUnchanged: boolean;
+  scopeProofComplete: boolean;
+  securityScopeUnchanged: boolean;
+  requiresNewGate: boolean;
+  reasons: string[];
+}
+
+export interface ModelFallbackAudit {
+  executionOwner: "Codex";
+  plannedPair: ModelPair;
+  actualPair: ModelPair;
+  fallbackReason: string | null;
+  chain: string[];
+  attempts: ModelFallbackAttempt[];
+  gateAssessment: ModelFallbackGateAssessment;
+}
+
 export interface ModelSelection {
+  executionOwner: "Codex";
   candidateId: string;
   backend: ModelBackend;
   model: string;
@@ -96,6 +152,8 @@ export interface ModelSelection {
   reason: string;
   cacheState: "fresh" | "cached";
   fallbackFrom: string | null;
+  fallbackPlan: ModelFallbackPlan;
+  fallbackAudit: ModelFallbackAudit;
 }
 
 export interface TaskComplexityAnalysis {
@@ -256,6 +314,8 @@ export interface ExecutionResult {
   tests: TestEvidence[];
   proposedOperations: OperationRequest[];
   simulated: boolean;
+  executionOwner?: ExecutionOwner;
+  modelFallbackAudit?: ModelFallbackAudit | null;
 }
 
 export interface ProcessMetadata {

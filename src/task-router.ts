@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { detectCliReasonCodes, routeExecutionMode } from "./execution-mode-router.js";
 import { analyzeTaskComplexity } from "./task-analyzer.js";
-import type { ExecutionModeDecision, Handoff, OperationRequest, OrchestratorEdition, TaskCategory, TaskComplexityAnalysis, TaskRoute } from "./types.js";
+import type { ExecutionModeDecision, ExecutionOwner, Handoff, OperationRequest, OrchestratorEdition, TaskCategory, TaskComplexityAnalysis, TaskRoute } from "./types.js";
 
 export interface TaskRouteDecision {
+  executionOwner: ExecutionOwner;
   route: TaskRoute;
   confidence: "low" | "medium" | "high";
   category: TaskCategory;
   reasons: string[];
   signals: string[];
-  responseOwner: "outer-session" | "relay";
   execution: ExecutionModeDecision;
   complexity: TaskComplexityAnalysis;
 }
@@ -80,12 +80,12 @@ export function routeTask(text: string, options: TaskRouteOptions = {}): TaskRou
   const execution = routeExecutionMode(task, options.edition ?? "full", route);
   const complexity = analyzeTaskComplexity({ text: task, category, role: "planner", routeSignals: signals });
   return {
+    executionOwner: execution.executionOwner,
     route,
     confidence: signals.length === 0 ? "low" : materiallyMixed || signals.length === 1 ? "high" : "medium",
     category,
     reasons,
     signals,
-    responseOwner: route === "chat" ? "outer-session" : "relay",
     execution,
     complexity,
   };

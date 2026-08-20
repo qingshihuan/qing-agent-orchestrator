@@ -4,20 +4,21 @@
   "title": "Qing Task and Model Route",
   "type": "object",
   "additionalProperties": false,
-  "required": ["route", "confidence", "category", "reasons", "signals", "responseOwner", "execution", "complexity", "status", "handoffId", "modelSelection"],
+  "required": ["executionOwner", "route", "confidence", "category", "reasons", "signals", "execution", "complexity", "status", "handoffId", "modelSelection"],
   "properties": {
+    "executionOwner": { "$ref": "#/$defs/executionOwner" },
     "route": { "enum": ["chat", "codex", "hybrid"] },
     "confidence": { "enum": ["low", "medium", "high"] },
     "category": { "enum": ["advice", "analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"] },
     "reasons": { "type": "array", "items": { "type": "string" } },
     "signals": { "type": "array", "items": { "type": "string" } },
-    "responseOwner": { "enum": ["outer-session", "relay"] },
     "complexity": { "$ref": "#/$defs/complexity" },
     "execution": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["edition", "mode", "delegationTarget", "returnsToParent", "currentParentModelUnchanged", "modelSelectionScope", "reasonCodes", "recommendation", "suppressCliPromptForTask", "limitations"],
+      "required": ["executionOwner", "edition", "mode", "delegationTarget", "returnsToParent", "currentParentModelUnchanged", "modelSelectionScope", "reasonCodes", "recommendation", "suppressCliPromptForTask", "limitations"],
       "properties": {
+        "executionOwner": { "$ref": "#/$defs/executionOwner" },
         "edition": { "enum": ["standard", "full"] },
         "mode": { "enum": ["desktop-native", "cli-recommended", "cli-setup-required", "cli-awaiting-handoff-approval", "desktop-fallback"] },
         "delegationTarget": { "enum": ["outer-session", "internal-child", "visible-task"] },
@@ -62,8 +63,9 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["candidateId", "backend", "model", "profile", "reasoningEffort", "availability", "role", "complexityBand", "reason", "cacheState", "fallbackFrom"],
+          "required": ["executionOwner", "candidateId", "backend", "model", "profile", "reasoningEffort", "availability", "role", "complexityBand", "reason", "cacheState", "fallbackFrom", "fallbackPlan", "fallbackAudit"],
           "properties": {
+            "executionOwner": { "const": "Codex" },
             "candidateId": { "type": "string", "minLength": 1 },
             "backend": { "$ref": "#/$defs/modelBackend" },
             "model": { "type": "string", "minLength": 1 },
@@ -74,7 +76,9 @@
             "complexityBand": { "$ref": "#/$defs/complexityBand" },
             "reason": { "type": "string", "minLength": 1 },
             "cacheState": { "enum": ["fresh", "cached"] },
-            "fallbackFrom": { "type": ["string", "null"] }
+            "fallbackFrom": { "type": ["string", "null"] },
+            "fallbackPlan": { "$ref": "#/$defs/fallbackPlan" },
+            "fallbackAudit": { "$ref": "#/$defs/fallbackAudit" }
           }
         }
       ]
@@ -82,8 +86,9 @@
     "delegationInvocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["backend", "delegationTarget", "parentModelUnchanged", "modelSelectionScope", "override", "spawnAgent", "fieldMapping", "inheritedDefaults", "precedence"],
+      "required": ["executionOwner", "backend", "delegationTarget", "parentModelUnchanged", "modelSelectionScope", "override", "spawnAgent", "fieldMapping", "inheritedDefaults", "precedence", "fallbackPlan", "retryProtocol"],
       "properties": {
+        "executionOwner": { "const": "Codex" },
         "backend": { "const": "desktop-child" },
         "delegationTarget": { "const": "internal-child" },
         "parentModelUnchanged": { "const": true },
@@ -102,14 +107,150 @@
         },
         "fieldMapping": { "type": "object" },
         "inheritedDefaults": { "type": ["array", "null"], "items": { "type": "string" } },
-        "precedence": { "type": "string" }
+        "precedence": { "type": "string" },
+        "fallbackPlan": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/fallbackPlan" }
+          ]
+        },
+        "retryProtocol": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["trigger", "nextCandidateSource", "displayReplacementBeforeRetry", "recordFallbackReason", "reuseExistingGatesWhenScopeUnchanged", "newGateRequiredFor"],
+              "properties": {
+                "trigger": { "const": "spawn-rejected" },
+                "nextCandidateSource": { "const": "fallbackPlan.orderedCandidates" },
+                "displayReplacementBeforeRetry": { "const": true },
+                "recordFallbackReason": { "const": true },
+                "reuseExistingGatesWhenScopeUnchanged": { "const": true },
+                "newGateRequiredFor": {
+                  "type": "array",
+                  "items": { "enum": ["backend-change", "operations-change", "allowed-paths-change", "sandbox-change", "permissions-change", "effects-change"] },
+                  "minItems": 6,
+                  "maxItems": 6,
+                  "uniqueItems": true
+                }
+              }
+            }
+          ]
+        }
       }
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "route": { "const": "chat" } }, "required": ["route"] },
+      "then": {
+        "properties": {
+          "executionOwner": { "const": "ChatGPT" },
+          "execution": {
+            "properties": { "executionOwner": { "const": "ChatGPT" } },
+            "required": ["executionOwner"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "route": { "enum": ["codex", "hybrid"] } }, "required": ["route"] },
+      "then": {
+        "properties": {
+          "executionOwner": { "const": "Codex" },
+          "execution": {
+            "properties": { "executionOwner": { "const": "Codex" } },
+            "required": ["executionOwner"]
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "modelBackend": { "enum": ["desktop-child", "codex-cli"] },
     "reasoningEffort": { "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] },
     "complexityBand": { "enum": ["trivial", "normal", "complex", "high-risk"] },
+    "modelPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateId", "backend", "model", "profile", "reasoningEffort"],
+      "properties": {
+        "candidateId": { "type": "string", "minLength": 1 },
+        "backend": { "$ref": "#/$defs/modelBackend" },
+        "model": { "type": "string", "minLength": 1 },
+        "profile": { "type": ["string", "null"] },
+        "reasoningEffort": { "$ref": "#/$defs/reasoningEffort" }
+      }
+    },
+    "fallbackPlanCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateId", "backend", "model", "profile", "reasoningEffort", "availability", "observedState", "cacheState"],
+      "properties": {
+        "candidateId": { "type": "string", "minLength": 1 },
+        "backend": { "$ref": "#/$defs/modelBackend" },
+        "model": { "type": "string", "minLength": 1 },
+        "profile": { "type": ["string", "null"] },
+        "reasoningEffort": { "$ref": "#/$defs/reasoningEffort" },
+        "availability": { "enum": ["host-advertised", "entitlement-dependent"] },
+        "observedState": { "enum": ["host-advertised", "healthy", "unhealthy", "unverified", "expired"] },
+        "cacheState": { "enum": ["fresh", "cached", null] }
+      }
+    },
+    "fallbackPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "orderedCandidates", "sameBackendOnly", "noImplicitFallthrough"],
+      "properties": {
+        "strategy": { "const": "completion-first-explicit-chain" },
+        "orderedCandidates": { "type": "array", "items": { "$ref": "#/$defs/fallbackPlanCandidate" }, "minItems": 1 },
+        "sameBackendOnly": { "const": true },
+        "noImplicitFallthrough": { "const": true }
+      }
+    },
+    "fallbackAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate", "outcome", "reason"],
+      "properties": {
+        "candidate": { "$ref": "#/$defs/modelPair" },
+        "outcome": { "enum": ["selected", "unavailable", "rejected"] },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "fallbackGateAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backendUnchanged", "scopeProofComplete", "operationsUnchanged", "allowedPathsUnchanged", "sandboxUnchanged", "permissionsUnchanged", "effectsUnchanged", "securityScopeUnchanged", "requiresNewGate", "reasons"],
+      "properties": {
+        "backendUnchanged": { "type": "boolean" },
+        "scopeProofComplete": { "type": "boolean" },
+        "operationsUnchanged": { "type": "boolean" },
+        "allowedPathsUnchanged": { "type": "boolean" },
+        "sandboxUnchanged": { "type": "boolean" },
+        "permissionsUnchanged": { "type": "boolean" },
+        "effectsUnchanged": { "type": "boolean" },
+        "securityScopeUnchanged": { "type": "boolean" },
+        "requiresNewGate": { "type": "boolean" },
+        "reasons": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "fallbackAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executionOwner", "plannedPair", "actualPair", "fallbackReason", "chain", "attempts", "gateAssessment"],
+      "properties": {
+        "executionOwner": { "const": "Codex" },
+        "plannedPair": { "$ref": "#/$defs/modelPair" },
+        "actualPair": { "$ref": "#/$defs/modelPair" },
+        "fallbackReason": { "type": ["string", "null"] },
+        "chain": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "attempts": { "type": "array", "items": { "$ref": "#/$defs/fallbackAttempt" }, "minItems": 1 },
+        "gateAssessment": { "$ref": "#/$defs/fallbackGateAssessment" }
+      }
+    },
+    "executionOwner": { "enum": ["ChatGPT", "Codex"] },
     "complexity": {
       "type": "object",
       "additionalProperties": false,

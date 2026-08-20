@@ -79,6 +79,31 @@ test("desktop Review schema fail-closes PASS and bounded revision contracts", as
   assert.equal(reviseRule.revisionInstructions.minItems, 1);
 });
 
+test("model route schema requires completion-first fallback plan and audit evidence", async () => {
+  const schema = JSON.parse(await readFile("schemas/model-route.schema.json", "utf8")) as any;
+  assert.deepEqual(schema.$defs.executionOwner.enum, ["ChatGPT", "Codex"]);
+  assert.ok(schema.required.includes("executionOwner"));
+  assert.equal(schema.required.includes("responseOwner"), false);
+  assert.equal(schema.properties.responseOwner, undefined);
+  assert.ok(schema.properties.execution.required.includes("executionOwner"));
+  assert.equal(schema.allOf[0].if.properties.route.const, "chat");
+  assert.equal(schema.allOf[0].then.properties.executionOwner.const, "ChatGPT");
+  assert.equal(schema.allOf[0].then.properties.execution.properties.executionOwner.const, "ChatGPT");
+  assert.deepEqual(schema.allOf[1].if.properties.route.enum, ["codex", "hybrid"]);
+  assert.equal(schema.allOf[1].then.properties.executionOwner.const, "Codex");
+  assert.equal(schema.allOf[1].then.properties.execution.properties.executionOwner.const, "Codex");
+  const selection = schema.properties.modelSelection.anyOf.find((entry: any) => entry.type === "object");
+  for (const field of ["executionOwner", "fallbackPlan", "fallbackAudit"]) assert.ok(selection.required.includes(field), field);
+  const audit = schema.$defs.fallbackAudit;
+  for (const field of ["executionOwner", "plannedPair", "actualPair", "fallbackReason", "chain", "attempts", "gateAssessment"]) assert.ok(audit.required.includes(field), field);
+  const gate = schema.$defs.fallbackGateAssessment;
+  for (const field of ["backendUnchanged", "scopeProofComplete", "operationsUnchanged", "allowedPathsUnchanged", "sandboxUnchanged", "permissionsUnchanged", "effectsUnchanged", "securityScopeUnchanged", "requiresNewGate"]) assert.ok(gate.required.includes(field), field);
+  const delegation = schema.properties.delegationInvocation;
+  assert.ok(delegation.required.includes("executionOwner"));
+  assert.ok(delegation.required.includes("fallbackPlan"));
+  assert.ok(delegation.required.includes("retryProtocol"));
+});
+
 test("Handoff rejects an empty acceptance criteria list", async () => {
   const value = (await readExample()) as Record<string, unknown>;
   value.acceptanceCriteria = [];
