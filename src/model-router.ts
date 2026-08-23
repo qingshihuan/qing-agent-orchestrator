@@ -47,16 +47,23 @@ const desktopCapabilities: Readonly<Record<string, readonly ModelReasoningEffort
   "gpt-5.5": ["low", "medium", "high", "xhigh"],
   "gpt-5.4": ["low", "medium", "high", "xhigh"],
 };
-const cliCapabilities: Readonly<Record<string, readonly ModelReasoningEffort[]>> = {
-  "gpt-5.6": ["minimal", "low", "medium", "high", "xhigh"],
-  "gpt-5.6-sol": ["minimal", "low", "medium", "high", "xhigh"],
-  "gpt-5.6-terra": ["minimal", "low", "medium", "high", "xhigh"],
-  "gpt-5.6-luna": ["minimal", "low", "medium", "high", "xhigh"],
-  "gpt-5.3-codex-spark": ["minimal", "low", "medium", "high", "xhigh"],
-};
+
+// Config parsing accepts the full set of safe CLI effort tokens. The installed
+// Codex binary's bundled model catalog is authoritative and is checked before a
+// CLI candidate can become healthy or be selected.
+const catalogValidatedCliEfforts: readonly ModelReasoningEffort[] = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+];
 
 export function supportedReasoningEfforts(backend: ModelBackend, model: string): readonly ModelReasoningEffort[] {
-  return (backend === "desktop-child" ? desktopCapabilities : cliCapabilities)[model] ?? [];
+  if (backend === "codex-cli") return catalogValidatedCliEfforts;
+  return desktopCapabilities[model] ?? [];
 }
 
 export function validateModelCapability(candidate: Pick<ModelCandidate, "backend" | "model" | "profile" | "reasoningEffort" | "availability">): string | null {

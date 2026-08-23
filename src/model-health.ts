@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { parseCodexModelCatalog, validateCandidateAgainstCatalog, type CodexModelCatalog } from "./codex-model-catalog.js";
 import { NodeProcessRunner, type ProcessRequest, type ProcessResult, type ProcessRunner } from "./process-runner.js";
 import { formatProcessDiagnostic, redactSensitiveText } from "./executors/codex-exec-executor.js";
 import { validateModelCapability } from "./model-router.js";
@@ -88,6 +89,7 @@ export class ModelHealthChecker {
   private readonly cache = new Map<string, ModelHealthRecord>();
   private readonly pending = new Map<string, Promise<ModelHealthRecord>>();
   private versionPromise?: Promise<string>;
+  private catalogPromise?: Promise<CodexModelCatalog>;
 
   constructor(
     private readonly options: ModelHealthOptions,
@@ -105,7 +107,7 @@ export class ModelHealthChecker {
     if (cached?.expiresAt && Date.parse(cached.expiresAt) > now) return { ...cached, cacheState: "cached" };
     const current = this.pending.get(fingerprint);
     if (current) return { ...(await current), cacheState: "cached" };
-    const task = this.runProbe(candidate, cliVersion, fingerprint, now).finally(() => this.pending.delete(fingerprint));
+    const task = this.validateCatalogThenProbe(candidate, cliVersion, fingerprint, now).finally(() => this.pending.delete(fingerprint));
     this.pending.set(fingerprint, task);
     return task;
   }
@@ -133,15 +135,77 @@ export class ModelHealthChecker {
     return this.versionPromise;
   }
 
-  private request(args: string[], stdin: string, timeoutMs = this.options.timeoutMs): ProcessRequest {
+  private async catalog(): Promise<CodexModelCatalog> {
+    if (!this.catalogPromise) {
+      this.catalogPromise = this.runner.run(this.request(
+        ["debug", "models", "--bundled"],
+        "",
+        Math.min(this.options.timeoutMs, 15_000),
+        Math.max(this.options.maxOutputBytes ?? 0, 8 * 1024 * 1024),
+      )).then((result) => {
+        if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded) {
+          throw new Error(`Codex bundled model catalog command failed. ${formatProcessDiagnostic(result)}`);
+        }
+        return parseCodexModelCatalog(result.stdout);
+      });
+    }
+    return this.catalogPromise;
+  }
+
+  private request(
+    args: string[],
+    stdin: string,
+    timeoutMs = this.options.timeoutMs,
+    maxOutputBytes = this.options.maxOutputBytes ?? 128 * 1024,
+  ): ProcessRequest {
     return {
       command: this.options.command,
       args,
       cwd: this.options.cwd,
       stdin,
       timeoutMs,
-      maxOutputBytes: this.options.maxOutputBytes ?? 128 * 1024,
+      maxOutputBytes,
     };
+  }
+
+  private async validateCatalogThenProbe(candidate: ModelCandidate, cliVersion: string, fingerprint: string, now: number): Promise<ModelHealthRecord> {
+    const checkedAt = new Date(now).toISOString();
+    const expiresAt = new Date(now + this.options.ttlMs).toISOString();
+    try {
+      const catalog = await this.catalog();
+      const capabilityError = validateCandidateAgainstCatalog(candidate, catalog, cliVersion);
+      if (capabilityError) {
+        const record: ModelHealthRecord = {
+          candidateId: candidate.id,
+          fingerprint,
+          cliVersion,
+          state: "unhealthy",
+          cacheState: "fresh",
+          checkedAt,
+          expiresAt,
+          failure: "capability",
+          reason: capabilityError,
+        };
+        this.cache.set(fingerprint, record);
+        return record;
+      }
+    } catch (error) {
+      const message = redactSensitiveText(error instanceof Error ? error.message : String(error));
+      const record: ModelHealthRecord = {
+        candidateId: candidate.id,
+        fingerprint,
+        cliVersion,
+        state: "unhealthy",
+        cacheState: "fresh",
+        checkedAt,
+        expiresAt,
+        failure: "capability",
+        reason: `Codex bundled model catalog validation failed: ${message}`,
+      };
+      this.cache.set(fingerprint, record);
+      return record;
+    }
+    return this.runProbe(candidate, cliVersion, fingerprint, now);
   }
 
   private async runProbe(candidate: ModelCandidate, cliVersion: string, fingerprint: string, now: number): Promise<ModelHealthRecord> {
@@ -179,7 +243,7 @@ export class ModelHealthChecker {
           } else if (!candidate.roles.every((role) => capabilities.includes(role))) {
             record = { candidateId: candidate.id, fingerprint, cliVersion, state: "unhealthy", cacheState: "fresh", checkedAt, expiresAt, failure: "capability", reason: `Model preflight did not confirm every configured role. ${formatProcessDiagnostic(result)}` };
           } else {
-            record = { candidateId: candidate.id, fingerprint, cliVersion, state: "healthy", cacheState: "fresh", checkedAt, expiresAt, failure: null, reason: "Bounded structured preflight passed." };
+            record = { candidateId: candidate.id, fingerprint, cliVersion, state: "healthy", cacheState: "fresh", checkedAt, expiresAt, failure: null, reason: "Bundled catalog validation and bounded structured preflight passed." };
           }
         }
       }

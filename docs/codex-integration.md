@@ -36,13 +36,20 @@ CLI 是完整版的条件能力，不是完整版的启动依赖。标准版没�
 
 ## 模型和推理强度
 
-CLI 只能使用本机已配置并通过最小健康检查的候选。Planner 和 Executor 以独立参数获得最终 ModelSelection。sandbox、审批、workspace、network、schema、ephemeral、Windows runtime 和审计设置不能由候选覆盖。
+CLI 只能使用本机已配置并通过模型目录校验与最小健康检查的候选。Planner 和 Executor 以独立参数获得最终 ModelSelection。sandbox、审批、workspace、network、schema、ephemeral、Windows runtime 和审计设置不能由候选覆盖。
 
-配置接受 backend、model、可选 CLI profile、精确 reasoningEffort、availability、roles、routes、categories、complexityBands、tags、priority、enabled、fallbacks。CLI 文档当前确认 `minimal|low|medium|high|xhigh`，因此即使桌面主机对部分模型公布 `max/ultra`，Relay 也不会把它们发送给 CLI。配置按 model/backend 精确校验，拒绝跨后端 fallback、provider URL、token、secret 和未知字段。
+配置接受 backend、model、可选 CLI profile、精确 reasoningEffort、availability、roles、routes、categories、complexityBands、tags、priority、enabled、fallbacks。配置阶段只验证字段、token 边界、后端约束和显式 fallback 图；它不会用仓库内的永久静态表猜测某个未来或已更新的 Codex CLI 是否支持指定 pair。
+
+每个 CLI 候选在真实选择前依次经过两层检查：
+
+1. Relay 调用本机 `codex debug models --bundled`，解析当前二进制自带的模型目录，并核对 model slug、`supported_reasoning_levels` 与 `minimal_client_version`。
+2. 目录匹配后，再运行现有的 read-only、structured、bounded health probe，确认当前账户/entitlement 能真实调用该 pair，并确认配置角色。
+
+因此 `minimal|low|medium|high|xhigh|max|ultra` 都可以作为安全配置 token 表达，但只有本机目录明确公布且客户端版本满足要求的 model/reasoning pair 才可能成为 healthy；目录命令缺失、JSON 异常、模型不存在、档位不支持或客户端过旧都会在任务进程创建前失败关闭。`none` 不是可发送的 CLI 推理档位。配置继续拒绝跨后端 fallback、provider URL、token、secret 和未知字段。
 
 健康检查失败，或真实调用错误明确点名当前所选 model ID 并说明 unknown、account/entitlement 不支持、metadata not found 或 unavailable 时，只能沿配置的显式同后端链继续；无健康安全候选则失败关闭。选择事件保存 `executionOwner: Codex`、planned/actual pair、fallback reason、链和尝试，并用 `scopeProofComplete` 证明操作、安全与权限范围是否未变。同后端且完整证明 operations、allowedPaths、sandbox、permissions、effects 均不变时不新增 gate；证明缺失/不完整、跨后端或任一范围变化必须停止并重新审批。此规则同样适用于 high-risk band，不会削弱 Handoff 或操作 gate。
 
-CLI 可配置 `gpt-5.6`（通用模型指导中该 alias 指向 `gpt-5.6-sol`），推荐候选 ID 为 `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` 和 `gpt-5.3-codex-spark`。是否实际可用取决于本机版本、账户和 entitlement；只有最小预检健康的候选能被选择。当前订阅访问不应被解释为 Responses API entitlement，本实现也没有 API adapter。
+是否实际可用取决于本机 Codex 版本、账户和 entitlement；只有目录校验和最小预检都健康的候选能被选择。当前订阅访问不应被解释为 Responses API entitlement，本实现也没有 API adapter。
 
 ## 进程协议
 
