@@ -185,10 +185,10 @@ jobs:
             gh release create $env:TAG --target main --title $title --notes-file $env:NOTES --draft
           }
           elseif ($env:DRAFT -eq "true") {
-            gh release edit $env:TAG --target main --title $title --notes-file $env:NOTES --draft
+            gh release edit $env:TAG --title $title --notes-file $env:NOTES --draft
           }
           else {
-            gh release edit $env:TAG --target main --title $title --notes-file $env:NOTES
+            gh release edit $env:TAG --title $title --notes-file $env:NOTES
           }
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to create or update $env:TAG."
@@ -214,13 +214,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          $release = gh release view $env:TAG --json tagName,isDraft,isLatest,url,targetCommitish,assets | ConvertFrom-Json
+          $releaseJson = gh release view $env:TAG --json tagName,isDraft,isPrerelease,url,targetCommitish,assets,publishedAt
           if ($LASTEXITCODE -ne 0) {
             throw "Published release could not be read back."
           }
-          if ($release.tagName -ne $env:TAG -or $release.isDraft -or -not $release.isLatest) {
+          $release = $releaseJson | ConvertFrom-Json
+          if ($release.tagName -ne $env:TAG -or $release.isDraft -or $release.isPrerelease -or [string]::IsNullOrWhiteSpace([string]$release.publishedAt)) {
             throw "Published release state is invalid."
           }
+
+          $latestTag = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE -ne 0 -or $latestTag.Trim() -ne $env:TAG) {
+            throw "$env:TAG is not the repository's latest published release."
+          }
+
           $expected = @(
             "SHA256SUMS.txt",
             "qing-agent-orchestrator-full.zip",
