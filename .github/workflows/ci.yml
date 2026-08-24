@@ -105,12 +105,14 @@ jobs:
         shell: pwsh
         run: |
           $package = Get-Content -Raw package.json | ConvertFrom-Json
-          $lock = Get-Content -Raw package-lock.json | ConvertFrom-Json
+          # package-lock.json contains packages[""], which PowerShell only
+          # preserves when parsed as a hashtable.
+          $lock = Get-Content -Raw package-lock.json | ConvertFrom-Json -AsHashtable
           $runtime = Get-Content -Raw .agents/skills/qing-agent-orchestrator-full/runtime/package.json | ConvertFrom-Json
           $versions = @(
             [string]$package.version,
-            [string]$lock.version,
-            [string]$lock.packages.''.version,
+            [string]$lock["version"],
+            [string]$lock["packages"][""]["version"],
             [string]$runtime.version
           )
           if (@($versions | Where-Object { $_ -ne $env:VERSION }).Count -ne 0) {
