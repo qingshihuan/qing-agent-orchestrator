@@ -31,3 +31,31 @@ jobs:
           TMP: ${{ runner.temp }}
           TMPDIR: ${{ runner.temp }}
         run: npm test
+
+  package-skill:
+    needs: build-and-test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Rebuild and validate installable skill archives
+        shell: pwsh
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/ci-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Upload generated runtime and archives
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-skill-tree
+          path: |
+            .agents/skills/qing-agent-orchestrator-full/runtime
+            artifacts
+          if-no-files-found: error
+          retention-days: 3
+      - name: Verify generated files are committed
+        shell: pwsh
+        run: git diff --exit-code -- .agents/skills/qing-agent-orchestrator-full/runtime artifacts
