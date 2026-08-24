@@ -121,7 +121,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $env:NOTES -PathType Leaf)) {
             throw "Release notes are missing: $env:NOTES"
           }
-          if ((Get-Content -Raw CHANGELOG.md) -notmatch "(?m)^## $([regex]::Escape($env:VERSION)) - \d{4}-\d{2}-\d{2}$") {
+          if ((Get-Content -Raw CHANGELOG.md) -notmatch "(?m)^## $([regex]::Escape($env:VERSION)) - \d{4}-\d{2}-\d{2}\r?$") {
             throw "CHANGELOG.md has no dated $env:VERSION section."
           }
 
