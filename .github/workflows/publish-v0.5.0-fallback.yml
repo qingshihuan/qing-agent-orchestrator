@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 # Share the normal Release workflow's evaluated concurrency group so the two
 # publishers cannot mutate the same release simultaneously.
@@ -29,6 +30,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Report publisher run URL
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $runUrl = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          gh pr comment 6 --body "Fallback publisher started: $runUrl (commit $env:GITHUB_SHA)."
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Could not post the diagnostic run URL; publication will continue."
+            exit 0
+          }
 
       - name: Validate release metadata and committed artifacts
         shell: pwsh
@@ -178,3 +191,8 @@ jobs:
             }
           }
           Write-Host "Published $($release.url) from $($release.targetCommitish) with all verified assets."
+          gh pr comment 6 --body "Fallback publisher verified the published release and exact asset set: $($release.url)."
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Release succeeded, but the completion comment could not be posted."
+            exit 0
+          }
