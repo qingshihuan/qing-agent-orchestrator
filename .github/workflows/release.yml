@@ -22,6 +22,8 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
+    env:
+      GH_PROMPT_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -69,7 +71,8 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           $json = gh release view $env:TAG --json isDraft,url 2>$null
-          if ($LASTEXITCODE -eq 0) {
+          $viewExitCode = $LASTEXITCODE
+          if ($viewExitCode -eq 0) {
             $release = $json | ConvertFrom-Json
             "exists=true" >> $env:GITHUB_OUTPUT
             "draft=$([string]$release.isDraft).ToLowerInvariant()" >> $env:GITHUB_OUTPUT
@@ -79,6 +82,9 @@ jobs:
             "exists=false" >> $env:GITHUB_OUTPUT
             "draft=false" >> $env:GITHUB_OUTPUT
           }
+          # GitHub's pwsh wrapper exits with the last native command code. A
+          # missing release is expected here, so terminate this probe cleanly.
+          exit 0
 
       - name: Install dependencies
         if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
@@ -135,19 +141,26 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
           NOTES: ${{ steps.version.outputs.notes }}
+          RELEASE_EXISTS: ${{ steps.existing.outputs.exists }}
         run: |
           $title = "Qing-Agent-Orchestrator $env:TAG"
-          if (gh release view $env:TAG --json isDraft 2>$null) {
+          if ($env:RELEASE_EXISTS -eq "true") {
             gh release edit $env:TAG --title $title --notes-file $env:NOTES --target $env:GITHUB_SHA --draft
           }
           else {
             gh release create $env:TAG --target $env:GITHUB_SHA --title $title --notes-file $env:NOTES --draft
+          }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create or update draft release $env:TAG."
           }
           gh release upload $env:TAG `
             artifacts/qing-agent-orchestrator-standard.zip `
             artifacts/qing-agent-orchestrator-full.zip `
             artifacts/SHA256SUMS.txt `
             --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to upload release assets for $env:TAG."
+          }
 
       - name: Publish release
         if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
