@@ -83,9 +83,11 @@ jobs:
 
   prepare-v0-5-0:
     if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/release/v0.5.0' &&
-      !contains(github.event.head_commit.message, '[release-prep]')
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/release/v0.5.0' &&
+       !contains(github.event.head_commit.message, '[release-prep]')) ||
+      (github.event_name == 'pull_request' &&
+       github.head_ref == 'release/v0.5.0')
     permissions:
       contents: write
     runs-on: windows-latest
