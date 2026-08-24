@@ -65,9 +65,18 @@ jobs:
       - name: Verify generated runtime is committed
         shell: pwsh
         run: |
-          $changes = @(git status --porcelain --untracked-files=all -- .agents/skills/qing-agent-orchestrator-full/runtime)
-          if ($changes.Count -ne 0) {
-            $changes | ForEach-Object { Write-Host $_ }
-            git diff -- .agents/skills/qing-agent-orchestrator-full/runtime
+          $runtimePath = ".agents/skills/qing-agent-orchestrator-full/runtime"
+          $changed = @(git diff --ignore-cr-at-eol --name-only -- $runtimePath)
+          $untracked = @(git ls-files --others --exclude-standard -- $runtimePath)
+          if ($changed.Count -ne 0 -or $untracked.Count -ne 0) {
+            if ($changed.Count -ne 0) {
+              Write-Host "Tracked runtime drift:"
+              $changed | ForEach-Object { Write-Host $_ }
+              git diff --ignore-cr-at-eol -- $runtimePath
+            }
+            if ($untracked.Count -ne 0) {
+              Write-Host "Untracked runtime files:"
+              $untracked | ForEach-Object { Write-Host $_ }
+            }
             throw "The committed full-skill runtime is out of date."
           }
