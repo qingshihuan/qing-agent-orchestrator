@@ -15,6 +15,12 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         node: [18, 22]
     runs-on: ${{ matrix.os }}
+    env:
+      # Avoid Windows 8.3 short-path aliases (for example RUNNER~1) in
+      # temporary test fixtures while retaining the runner-managed temp root.
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
+      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
