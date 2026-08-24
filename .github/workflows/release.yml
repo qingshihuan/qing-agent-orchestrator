@@ -1,4 +1,5 @@
 name: Release
+# Idempotent publication: a repeated run reports an existing published release.
 
 on:
   push:
