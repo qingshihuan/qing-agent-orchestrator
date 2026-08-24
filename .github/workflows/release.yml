@@ -40,13 +40,15 @@ jobs:
         shell: pwsh
         run: |
           $package = Get-Content -Raw -LiteralPath package.json | ConvertFrom-Json
-          $lock = Get-Content -Raw -LiteralPath package-lock.json | ConvertFrom-Json
+          # npm lockfiles contain packages[""]. PowerShell only preserves an
+          # empty JSON property name when the object is parsed as a hashtable.
+          $lock = Get-Content -Raw -LiteralPath package-lock.json | ConvertFrom-Json -AsHashtable
           $runtime = Get-Content -Raw -LiteralPath .agents/skills/qing-agent-orchestrator-full/runtime/package.json | ConvertFrom-Json
           $version = [string]$package.version
           if ($version -notmatch '^\d+\.\d+\.\d+$') {
             throw "package.json version must be a stable semantic version: $version"
           }
-          if ([string]$lock.version -ne $version -or [string]$lock.packages.''.version -ne $version) {
+          if ([string]$lock["version"] -ne $version -or [string]$lock["packages"][""]["version"] -ne $version) {
             throw "package-lock.json is not synchronized with package.json version $version."
           }
           if ([string]$runtime.version -ne $version) {
