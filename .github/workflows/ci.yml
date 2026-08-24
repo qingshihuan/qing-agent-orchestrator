@@ -41,11 +41,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Preserve committed archives for semantic comparison
+        shell: pwsh
+        run: Copy-Item -LiteralPath artifacts -Destination "${{ runner.temp }}/committed-artifacts" -Recurse
       - run: npm ci --ignore-scripts
       - run: npm run build
       - name: Rebuild and validate installable skill archives
         shell: pwsh
         run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/ci-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Verify committed archives contain the current package tree
+        shell: pwsh
+        run: ./scripts/compare-skill-archives.ps1 -CommittedRoot "${{ runner.temp }}/committed-artifacts" -GeneratedRoot artifacts -ScratchRoot "${{ runner.temp }}/qing-archive-compare-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Upload generated runtime and archives
         if: always()
         uses: actions/upload-artifact@v4
@@ -56,6 +62,12 @@ jobs:
             artifacts
           if-no-files-found: error
           retention-days: 3
-      - name: Verify generated files are committed
+      - name: Verify generated runtime is committed
         shell: pwsh
-        run: git diff --exit-code -- .agents/skills/qing-agent-orchestrator-full/runtime artifacts
+        run: |
+          $changes = @(git status --porcelain --untracked-files=all -- .agents/skills/qing-agent-orchestrator-full/runtime)
+          if ($changes.Count -ne 0) {
+            $changes | ForEach-Object { Write-Host $_ }
+            git diff -- .agents/skills/qing-agent-orchestrator-full/runtime
+            throw "The committed full-skill runtime is out of date."
+          }
