@@ -68,6 +68,7 @@ $safeConfig = @'
   "security": { "approvedGateIds": [] }
 }
 '@
+$safeConfig = $safeConfig.Replace("`r`n", "`n").Replace("`r", "`n")
 [System.IO.File]::WriteAllText((Join-Path $runtimeRoot "config\relay.user.json"), $safeConfig, [System.Text.UTF8Encoding]::new($false))
 
 $standardZip = Join-Path $artifactsRoot "qing-agent-orchestrator-standard.zip"
