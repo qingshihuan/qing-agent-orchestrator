@@ -15,12 +15,6 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         node: [18, 22]
     runs-on: ${{ matrix.os }}
-    env:
-      # Avoid Windows 8.3 short-path aliases (for example RUNNER~1) in
-      # temporary test fixtures while retaining the runner-managed temp root.
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,4 +23,11 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
-      - run: npm test
+      - name: Run tests with a canonical temporary root
+        env:
+          # Avoid Windows 8.3 short-path aliases (for example RUNNER~1) in
+          # temporary fixtures while retaining GitHub's managed temp root.
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: npm test
