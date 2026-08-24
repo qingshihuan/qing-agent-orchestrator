@@ -115,11 +115,13 @@ jobs:
           }
           if ($start -lt 0 -or $end -le $start) { throw "Could not locate the guarded Python release transformation." }
           $sourceLines = @($lines[($start + 1)..($end - 1)])
-          $indents = @($sourceLines | Where-Object { $_.Trim().Length -gt 0 } | ForEach-Object { $_.Length - $_.TrimStart().Length })
-          if ($indents.Count -eq 0) { throw "The guarded Python release transformation is empty." }
-          $minimumIndent = ($indents | Measure-Object -Minimum).Minimum
+          $firstCodeLine = $sourceLines | Where-Object { $_.Trim().Length -gt 0 } | Select-Object -First 1
+          if ($null -eq $firstCodeLine) { throw "The guarded Python release transformation is empty." }
+          $baseIndent = $firstCodeLine.Length - $firstCodeLine.TrimStart().Length
+          if ($baseIndent -le 0) { throw "The guarded Python release transformation has no YAML base indent." }
+          $prefix = " " * $baseIndent
           $dedented = @($sourceLines | ForEach-Object {
-            if ($_.Length -ge $minimumIndent) { $_.Substring($minimumIndent) } else { "" }
+            if ($_.StartsWith($prefix)) { $_.Substring($baseIndent) } else { $_ }
           })
           $scriptPath = Join-Path $env:RUNNER_TEMP "prepare-v0.5.0.py"
           [System.IO.File]::WriteAllText($scriptPath, ($dedented -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
