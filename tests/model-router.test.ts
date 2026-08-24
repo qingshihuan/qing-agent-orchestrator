@@ -140,15 +140,17 @@ test("an unavailable priority winner does not implicitly fall through to an unli
   assert.throws(() => selectModelCandidate([primary, unrelated], statuses, { backend: "codex-cli", role: "executor", route: "codex", category: "code_change", complexityBand: "complex" }), /No available configured candidate/);
 });
 
-test("capability matrix validates exact backend/model/reasoning combinations", () => {
+test("desktop capabilities remain host snapshots while CLI efforts are deferred to the bundled runtime catalog", () => {
   assert.ok(supportedReasoningEfforts("desktop-child", "gpt-5.6-sol").includes("ultra"));
   assert.ok(!supportedReasoningEfforts("desktop-child", "gpt-5.6-luna").includes("ultra"));
-  assert.ok(supportedReasoningEfforts("codex-cli", "gpt-5.6").includes("minimal"));
   assert.deepEqual(supportedReasoningEfforts("desktop-child", "gpt-5.3-codex-spark"), []);
   assert.deepEqual(supportedReasoningEfforts("desktop-child", "gpt-5.4-mini"), []);
-  assert.ok(supportedReasoningEfforts("codex-cli", "gpt-5.3-codex-spark").includes("xhigh"));
-  assert.ok(!supportedReasoningEfforts("codex-cli", "gpt-5.6-sol").includes("max"));
-  assert.match(validateModelCapability({ backend: "codex-cli", model: "gpt-5.6-sol", profile: null, reasoningEffort: "max", availability: "entitlement-dependent" }) ?? "", /unsupported/);
+
+  for (const effort of ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const) {
+    assert.ok(supportedReasoningEfforts("codex-cli", "future-catalog-model").includes(effort));
+    assert.equal(validateModelCapability({ backend: "codex-cli", model: "future-catalog-model", profile: null, reasoningEffort: effort, availability: "entitlement-dependent" }), null);
+  }
+  assert.match(validateModelCapability({ backend: "codex-cli", model: "gpt-5.6-sol", profile: null, reasoningEffort: "none", availability: "entitlement-dependent" }) ?? "", /unsupported/);
 });
 
 test("disabled, expired, unverified, unsupported band, and wrong backend fail closed", () => {

@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [18, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Run tests with a canonical temporary root
+        env:
+          # Avoid Windows 8.3 short-path aliases (for example RUNNER~1) in
+          # temporary fixtures while retaining GitHub's managed temp root.
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: npm test
+
+  package-skill:
+    needs: build-and-test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Preserve committed archives for semantic comparison
+        shell: pwsh
+        run: Copy-Item -LiteralPath artifacts -Destination "${{ runner.temp }}/committed-artifacts" -Recurse
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Rebuild and validate installable skill archives
+        shell: pwsh
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/ci-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Verify committed archives contain the current package tree
+        shell: pwsh
+        run: ./scripts/compare-skill-archives.ps1 -CommittedRoot "${{ runner.temp }}/committed-artifacts" -GeneratedRoot artifacts -ScratchRoot "${{ runner.temp }}/qing-archive-compare-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Upload generated runtime and archives
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-skill-tree
+          path: |
+            .agents/skills/qing-agent-orchestrator-full/runtime
+            artifacts
+          if-no-files-found: error
+          retention-days: 3
+      - name: Verify generated runtime is committed
+        shell: pwsh
+        run: |
+          $runtimePath = ".agents/skills/qing-agent-orchestrator-full/runtime"
+          $changed = @(git diff --ignore-cr-at-eol --name-only -- $runtimePath)
+          $untracked = @(git ls-files --others --exclude-standard -- $runtimePath)
+          if ($changed.Count -ne 0 -or $untracked.Count -ne 0) {
+            if ($changed.Count -ne 0) {
+              Write-Host "Tracked runtime drift:"
+              $changed | ForEach-Object { Write-Host $_ }
+              git diff --ignore-cr-at-eol -- $runtimePath
+            }
+            if ($untracked.Count -ne 0) {
+              Write-Host "Untracked runtime files:"
+              $untracked | ForEach-Object { Write-Host $_ }
+            }
+            throw "The committed full-skill runtime is out of date."
+          }

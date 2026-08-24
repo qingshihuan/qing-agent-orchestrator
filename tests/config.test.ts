@@ -48,7 +48,7 @@ test("desktop standard skill source contains no CLI launcher or runtime material
   assert.doesNotMatch(content, /codex\s+exec|Codex CLI|QING_RELAY_HOME|qing\.ps1/i);
 });
 
-test("strict model routing accepts explicit candidates and rejects unsafe configuration", async () => {
+test("strict model routing accepts catalog-validated CLI pairs and rejects unsafe configuration", async () => {
   const directory = await mkdtemp(join(tmpdir(), "qing-model-config-"));
   const baseCandidate = {
     id: "primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent",
@@ -61,9 +61,16 @@ test("strict model routing accepts explicit candidates and rejects unsafe config
   try {
     const valid = await loadConfig(await write("valid.json", { modelRouting: { mode: "explicit", healthTtlMs: 60_000, probeTimeoutMs: 5_000, candidates: [baseCandidate, { ...baseCandidate, id: "fallback", profile: null, reasoningEffort: "medium", priority: 1, fallbacks: [] }] } }));
     assert.equal(valid.modelRouting.candidates.length, 2);
+
+    const maximum = await loadConfig(await write("max.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, reasoningEffort: "max", fallbacks: [] }] } }));
+    assert.equal(maximum.modelRouting.candidates[0]?.reasoningEffort, "max");
+
+    const futureCatalogModel = await loadConfig(await write("future.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, model: "future-catalog-model", reasoningEffort: "ultra", fallbacks: [] }] } }));
+    assert.equal(futureCatalogModel.modelRouting.candidates[0]?.model, "future-catalog-model");
+
     await assert.rejects(loadConfig(await write("unknown.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, provider: "forbidden" }] } })), /unknown or forbidden fields.*provider/);
     await assert.rejects(loadConfig(await write("secret.json", { apiKey: "secret" })), /unknown or forbidden fields.*apiKey/);
-    await assert.rejects(loadConfig(await write("effort.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, reasoningEffort: "max" }] } })), /capability mismatch.*unsupported/);
+    await assert.rejects(loadConfig(await write("effort.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, reasoningEffort: "none" }] } })), /capability mismatch.*unsupported/);
     await assert.rejects(loadConfig(await write("duplicate.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, baseCandidate] } })), /duplicate IDs/);
     await assert.rejects(loadConfig(await write("dangling.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, fallbacks: ["missing"] }] } })), /dangling fallback/);
     await assert.rejects(loadConfig(await write("cycle.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, { ...baseCandidate, id: "fallback", fallbacks: ["primary"] }] } })), /fallback cycle/);
@@ -128,7 +135,7 @@ test("legacy run refuses real execution regardless of config", async () => {
     ],
   });
   assert.equal(disabled.exitCode, 1);
-    assert.match(disabled.stderr, /Legacy run cannot start real codex-exec/i);
+  assert.match(disabled.stderr, /Legacy run cannot start real codex-exec/i);
 
   const directory = await mkdtemp(join(tmpdir(), "qing-config-test-"));
   const path = join(directory, "relay.json");
