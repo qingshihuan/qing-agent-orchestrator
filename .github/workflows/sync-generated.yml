@@ -1,0 +1,47 @@
+name: Sync generated skill artifacts
+
+on:
+  push:
+    branches:
+      - fix/runtime-model-catalog-ci
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-generated-skill-artifacts
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: >-
+      github.repository == 'qingshihuan/qing-agent-orchestrator' &&
+      github.ref == 'refs/heads/fix/runtime-model-catalog-ci' &&
+      !contains(github.event.head_commit.message, '[generated-sync]')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/runtime-model-catalog-ci
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Rebuild and validate installable packages
+        shell: pwsh
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/sync-${{ github.run_id }}"
+      - name: Commit generated runtime and archives once
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- .agents/skills/qing-agent-orchestrator-full/runtime artifacts
+          if (git diff --cached --quiet) {
+            Write-Host "Generated files are already synchronized."
+            exit 0
+          }
+          git commit -m "build: sync generated skill runtime and archives [generated-sync]"
+          git push origin HEAD:fix/runtime-model-catalog-ci
