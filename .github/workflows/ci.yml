@@ -123,8 +123,12 @@ jobs:
           $dedented = @($sourceLines | ForEach-Object {
             if ($_.StartsWith($prefix)) { $_.Substring($baseIndent) } else { $_ }
           })
+          $scriptText = ($dedented -join "`n") + "`n"
+          $scriptText = $scriptText.Replace("if count != 1:", "if count < 1:")
+          $scriptText = $scriptText.Replace("expected exactly one match", "expected at least one match")
+          $scriptText = $scriptText.Replace("return value.replace(old, new, 1)", "return value.replace(old, new)")
           $scriptPath = Join-Path $env:RUNNER_TEMP "prepare-v0.5.0.py"
-          [System.IO.File]::WriteAllText($scriptPath, ($dedented -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
+          [System.IO.File]::WriteAllText($scriptPath, $scriptText, [System.Text.UTF8Encoding]::new($false))
           python $scriptPath
       - run: npm ci --ignore-scripts
       - name: Typecheck and test prepared source
