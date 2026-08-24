@@ -40,7 +40,9 @@ New-Item -ItemType Directory -Force -Path (Join-Path $runtimeRoot "config") | Ou
 
 Copy-Item -LiteralPath (Join-Path $projectRoot "dist\src") -Destination (Join-Path $runtimeRoot "dist") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "schemas") -Destination $runtimeRoot -Recurse -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "package.json") -Destination (Join-Path $runtimeRoot "package.json") -Force
+$rootPackageText = [System.IO.File]::ReadAllText((Join-Path $projectRoot "package.json"))
+$rootPackageText = $rootPackageText.Replace("`r`n", "`n").Replace("`r", "`n")
+[System.IO.File]::WriteAllText((Join-Path $runtimeRoot "package.json"), $rootPackageText, [System.Text.UTF8Encoding]::new($false))
 
 $safeConfig = @'
 {
@@ -66,6 +68,7 @@ $safeConfig = @'
   "security": { "approvedGateIds": [] }
 }
 '@
+$safeConfig = $safeConfig.Replace("`r`n", "`n").Replace("`r", "`n")
 [System.IO.File]::WriteAllText((Join-Path $runtimeRoot "config\relay.user.json"), $safeConfig, [System.Text.UTF8Encoding]::new($false))
 
 $standardZip = Join-Path $artifactsRoot "qing-agent-orchestrator-standard.zip"

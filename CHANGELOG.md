@@ -1,6 +1,38 @@
 # Changelog
 
-本项目采用语义化版本编号。当前发布候选版本为 `v0.4.0`；`v0.3.0` 的历史记录与本地标签语义保持不变。
+本项目采用语义化版本编号。当前稳定版本为 `v0.5.0`；既有版本的历史记录与标签语义保持不变。
+
+## 0.5.0 - 2026-08-24
+
+### Added
+
+- 运行时解析当前安装的 `codex debug models --bundled` 输出，以真实模型 slug、`supported_reasoning_levels` 和 `minimal_client_version` 作为 CLI 能力来源。
+- Windows / Ubuntu、Node.js 18 / 22 的四平台 CI 矩阵，以及独立的 Skill 打包、解压内容和 SHA-256 验证门禁。
+- 可复用的 ZIP 语义比较脚本：按解压后的精确文件集合和逐文件哈希判断产物一致性，不受 ZIP 时间戳影响。
+- 自动化 GitHub Release 工作流：从同步版本号、Changelog 和发布说明构建、复验并发布标准版、完整版和校验清单。
+
+### Changed
+
+- CLI 配置层允许表达 `minimal|low|medium|high|xhigh|max|ultra`；某个组合是否可用由当前 Codex 目录和账户健康探针共同决定，不再由仓库静态模型表决定。
+- CLI 候选在进入健康状态前必须依次通过目录能力验证和受限、只读、结构化 entitlement 探针。
+- 完整版编译 runtime、两个可安装 ZIP 与 `SHA256SUMS.txt` 纳入持续漂移检查。
+
+### Fixed
+
+- 修复 Windows GitHub Runner 的 8.3 短路径别名导致同一临时目录被当作不同路径的问题。
+- 修复 wildcard `allowedPaths` 可让另一平台格式的绝对路径或 UNC 路径绕过边界检查的问题。
+- 修复源码已更新但完整 Skill runtime、ZIP 或校验清单仍停留在旧实现的发布风险。
+
+### Safety
+
+- POSIX 绝对路径、Windows 盘符路径、UNC 路径和父目录穿越均在 wildcard 匹配前失败关闭。
+- 缺失目录、目录格式异常、模型不存在、推理强度不支持、最低客户端版本不满足或账户探针失败时，真实 `codex exec` 不会启动。
+- 跨后端或安全范围变化仍要求新的 gate；本版本没有放宽既有审批边界。
+
+### Evidence boundary
+
+- 源码、四平台测试、Skill 打包、归档内容和哈希由 CI 与 Release 工作流独立复验。
+- 发布流程不会把受控 fake-runner 或目录解析结果表述为某个账户的 connected CLI 成功；目标安装仍须通过实际 entitlement 探针。
 
 ## 0.4.0 - 2026-08-20
 

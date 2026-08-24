@@ -1,0 +1,163 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+      - package-lock.json
+      - CHANGELOG.md
+      - "docs/release-notes-v*.md"
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Read and validate release version
+        id: version
+        shell: pwsh
+        run: |
+          $package = Get-Content -Raw -LiteralPath package.json | ConvertFrom-Json
+          $lock = Get-Content -Raw -LiteralPath package-lock.json | ConvertFrom-Json
+          $runtime = Get-Content -Raw -LiteralPath .agents/skills/qing-agent-orchestrator-full/runtime/package.json | ConvertFrom-Json
+          $version = [string]$package.version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "package.json version must be a stable semantic version: $version"
+          }
+          if ([string]$lock.version -ne $version -or [string]$lock.packages.''.version -ne $version) {
+            throw "package-lock.json is not synchronized with package.json version $version."
+          }
+          if ([string]$runtime.version -ne $version) {
+            throw "The packaged full runtime version is not synchronized with package.json version $version."
+          }
+          $notes = "docs/release-notes-v$version.md"
+          if (-not (Test-Path -LiteralPath $notes -PathType Leaf)) {
+            throw "Release notes are missing: $notes"
+          }
+          $changelog = Get-Content -Raw -LiteralPath CHANGELOG.md
+          if ($changelog -notmatch "(?m)^## $([regex]::Escape($version)) - \d{4}-\d{2}-\d{2}$") {
+            throw "CHANGELOG.md has no dated section for $version."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+          "notes=$notes" >> $env:GITHUB_OUTPUT
+
+      - name: Check whether the release already exists
+        id: existing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          $json = gh release view $env:TAG --json isDraft,url 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $release = $json | ConvertFrom-Json
+            "exists=true" >> $env:GITHUB_OUTPUT
+            "draft=$([string]$release.isDraft).ToLowerInvariant()" >> $env:GITHUB_OUTPUT
+            "url=$($release.url)" >> $env:GITHUB_OUTPUT
+          }
+          else {
+            "exists=false" >> $env:GITHUB_OUTPUT
+            "draft=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Install dependencies
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck and test
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Preserve committed archives
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        shell: pwsh
+        run: Copy-Item -LiteralPath artifacts -Destination "${{ runner.temp }}/committed-artifacts" -Recurse
+
+      - name: Rebuild and validate installable packages
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        shell: pwsh
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/release-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      - name: Verify committed archives match the release build
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        shell: pwsh
+        run: ./scripts/compare-skill-archives.ps1 -CommittedRoot "${{ runner.temp }}/committed-artifacts" -GeneratedRoot artifacts -ScratchRoot "${{ runner.temp }}/qing-release-compare-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      - name: Verify generated runtime has no semantic drift
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        shell: pwsh
+        run: |
+          $runtimePath = ".agents/skills/qing-agent-orchestrator-full/runtime"
+          $changed = @(git diff --ignore-cr-at-eol --name-only -- $runtimePath)
+          $untracked = @(git ls-files --others --exclude-standard -- $runtimePath)
+          if ($changed.Count -ne 0 -or $untracked.Count -ne 0) {
+            if ($changed.Count -ne 0) {
+              $changed | ForEach-Object { Write-Host $_ }
+              git diff --ignore-cr-at-eol -- $runtimePath
+            }
+            if ($untracked.Count -ne 0) {
+              $untracked | ForEach-Object { Write-Host $_ }
+            }
+            throw "The committed full-skill runtime differs from the release build."
+          }
+
+      - name: Create or update a draft release
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES: ${{ steps.version.outputs.notes }}
+        run: |
+          $title = "Qing-Agent-Orchestrator $env:TAG"
+          if (gh release view $env:TAG --json isDraft 2>$null) {
+            gh release edit $env:TAG --title $title --notes-file $env:NOTES --target $env:GITHUB_SHA --draft
+          }
+          else {
+            gh release create $env:TAG --target $env:GITHUB_SHA --title $title --notes-file $env:NOTES --draft
+          }
+          gh release upload $env:TAG `
+            artifacts/qing-agent-orchestrator-standard.zip `
+            artifacts/qing-agent-orchestrator-full.zip `
+            artifacts/SHA256SUMS.txt `
+            --clobber
+
+      - name: Publish release
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release edit $env:TAG --draft=false --latest
+
+      - name: Report existing published release
+        if: steps.existing.outputs.exists == 'true' && steps.existing.outputs.draft != 'true'
+        shell: pwsh
+        run: Write-Host "Release already exists and is published: ${{ steps.existing.outputs.url }}"

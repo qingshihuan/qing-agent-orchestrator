@@ -1,6 +1,6 @@
 # Qing-Agent-Orchestrator
 
-[简体中文](README.md) · [v0.4.0 release notes](docs/release-notes-v0.4.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+[简体中文](README.md) · [v0.5.0 release notes](docs/release-notes-v0.5.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 **Let the model that understands, plans, and communicates well clarify the work; let Codex handle code and engineering execution.**
 
@@ -24,17 +24,17 @@ Routes and final reports expose one high-level owner only: `executionOwner: Chat
 
 Complexity is an explainable score rather than a fast/complex toggle. It combines category, Planner/Executor/Reviewer role, risk, single/multi-step/cross-system scope, and observed signals into `trivial | normal | complex | high-risk`. An ordinary single-file code execution stays normal; multi-step, cross-system, and high-risk work escalate.
 
-Every candidate is bound to `desktop-child` or `codex-cli`. The internal `collaboration.spawn_agent` interface advertises only `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, and `gpt-5.4`, with exact per-model effort validation. An internal desktop child receives `{ model, reasoning_effort }`; explicit spawn values override `agents.default_subagent_model` and `agents.default_subagent_reasoning_effort`. The CLI receives `-m` and `model_reasoning_effort`; the documented CLI path sends only `minimal|low|medium|high|xhigh`, never `max/ultra`. Overrides apply only to delegated backends and never switch the parent. `gpt-5.3-codex-spark` remains only as an entitlement-probed CLI candidate listed by the official Codex models documentation; API catalog evidence is not desktop-child entitlement.
+Every candidate is bound to `desktop-child` or `codex-cli`. Desktop candidates continue to use the capability snapshot advertised by the host. An internal child receives `{ model, reasoning_effort }`; explicit values affect only the delegated backend and never change the parent model. The CLI receives `-m` and `model_reasoning_effort`. Configuration may express `minimal|low|medium|high|xhigh|max|ultra`, but the installed `codex debug models --bundled` catalog is authoritative for model slugs, reasoning levels, and minimum client versions. A CLI candidate must also pass a bounded, read-only, structured account-entitlement probe, so a catalog-valid but account-unavailable pair never becomes healthy.
 
-Availability is a current host/documentation snapshot and can drift with version, account, or entitlement. Ordinary and high-risk work both use a completion-first policy: CLI candidates must pass the existing health probe, while a rejected desktop spawn may continue only after the parent displays the replacement pair and reason and only along an explicit, capability-valid, same-backend fallback chain. Exhaustion fails closed and never selects an unrelated candidate. A real CLI invocation retries only when the error explicitly names the selected model ID and says that model is unknown, unsupported by the account/entitlement, missing metadata, or unavailable. Authentication, process, timeout, cancellation, output-limit, protocol, model-output-schema, and ordinary failures are not retried. Every substitution emits `executionOwner: Codex`, planned/actual pairs, reason, chain and attempts, plus a complete scope proof; missing or incomplete proof requires a new gate. ChatGPT/Codex subscription access is not Responses API entitlement; this project has no provider URL, token, or API adapter.
+Availability is a current host/runtime snapshot and can drift with version, account, or entitlement. Ordinary and high-risk work both use a completion-first policy: CLI candidates must pass the existing health probe, while a rejected desktop spawn may continue only after the parent displays the replacement pair and reason and only along an explicit, capability-valid, same-backend fallback chain. Exhaustion fails closed and never selects an unrelated candidate. A real CLI invocation retries only when the error explicitly names the selected model ID and says that model is unknown, unsupported by the account/entitlement, missing metadata, or unavailable. Authentication, process, timeout, cancellation, output-limit, protocol, model-output-schema, and ordinary failures are not retried. Every substitution emits `executionOwner: Codex`, planned/actual pairs, reason, chain and attempts, plus a complete scope proof; missing or incomplete proof requires a new gate. ChatGPT/Codex subscription access is not Responses API entitlement; this project has no provider URL, token, or API adapter.
 
-## v0.4.0 highlights
+## v0.5.0 highlights
 
-- **Real model routing:** select an explicit model/reasoning pair from backend capability, role, complexity, and effort while leaving the parent model unchanged.
-- **One execution owner:** public contracts use only `executionOwner: ChatGPT | Codex`; there is no second owner taxonomy.
-- **Completion-first fallback:** substitute only through an explicit, capability-valid, same-backend chain and record the planned/actual pair, reason, chain, and every attempt; exhaustion fails closed.
-- **High-risk gates stay strict:** reuse an operation gate only with complete proof that operations, allowed paths, sandbox, permissions, and effects are unchanged. Cross-backend, incomplete-proof, or scope-changing substitutions require approval again.
-- **Failure classification is fail-closed:** only an explicit selected-model identifier, account-entitlement, metadata, or availability rejection can trigger bounded fallback. Authentication, process, timeout, cancellation, output-limit, protocol, output-schema, and ordinary failures never retry.
+- **The installed catalog is authoritative:** CLI model slugs, reasoning levels, and minimum client versions come from the current Codex bundled catalog rather than a permanent repository table.
+- **Two-layer health validation:** a catalog-valid pair must still pass a bounded read-only entitlement probe before real execution can start.
+- **Cross-platform path fail-closure:** wildcards no longer admit POSIX, Windows, UNC absolute paths, or parent traversal.
+- **Four-platform continuous verification:** Windows and Ubuntu on Node.js 18 and 22 run typechecking and the complete test suite.
+- **Provable release artifacts:** the Full runtime, both ZIPs, extracted per-file contents, and SHA-256 manifests are independently checked by CI and the release workflow.
 
 ## Workflow
 
@@ -126,11 +126,11 @@ Code, complexity, and duration alone do not trigger it. Declining returns to des
 
 ## Current boundary
 
-`v0.4.0` includes the two editions, task and execution-mode routing, real delegated model routing, the sole `executionOwner: ChatGPT | Codex` contract, completion-first explicit same-backend fallback, same-scope high-risk gate reuse, fail-closed rejection classification, structured contracts, Relay and RunStore evidence, rule-based review, an observable control plane, and an optional real `codex exec` adapter that is disabled by default.
+`v0.5.0` includes both editions; task and execution-mode routing; delegated model routing; installed Codex catalog validation for CLI model slugs, reasoning levels, and minimum client versions; the subsequent bounded entitlement probe; the sole `executionOwner: ChatGPT | Codex` contract; completion-first explicit same-backend fallback; same-scope high-risk gate reuse; fail-closed rejection classification; cross-platform absolute-path and traversal protection; structured contracts; Relay, RunStore, rule-based review, and the observable control plane; the disabled-by-default real `codex exec` adapter; four-platform CI; generated-runtime drift detection; content-verified installable archives; and an automated GitHub Release pipeline.
 
-It does not yet include an OpenAI API / Codex SDK dual-agent adapter, native approval buttons, a persistent cross-process service queue, a separate user-visible model picker, or a connected CLI write E2E. SDK/API integration is planned as an optional branch and will not replace the desktop-first mainline. See the [roadmap](docs/roadmap.md).
+It still does not include an OpenAI API / Codex SDK dual-agent adapter, native approval buttons, a persistent cross-process service queue, a separate user-visible model picker, a connected CLI write E2E, or a guarantee that any particular account is entitled to a specific model pair. SDK/API integration remains an optional future branch and will not replace the desktop-first mainline. See the [roadmap](docs/roadmap.md).
 
-Evidence remains separated: a connected desktop delegation succeeded with `gpt-5.6-luna / medium`; a connected CLI attempt with `gpt-5.6 / medium` was rejected by the current account/entitlement; and the latest fallback behavior is proven by controlled Executor fake-runner tests, not by a new connected CLI success. See the [v0.4.0 release notes](docs/release-notes-v0.4.0.md). The historical [v0.3.0 release notes](docs/release-notes-v0.3.0.md) remain available.
+This release adds verifiable runtime-catalog, client-version, account-preflight, and publication layers. It does not treat catalog parsing or controlled fake-runner tests as a new connected CLI success; the target installation must still pass its real health probe. See the [v0.5.0 release notes](docs/release-notes-v0.5.0.md). Historical details remain in the [v0.4.0](docs/release-notes-v0.4.0.md) and [v0.3.0](docs/release-notes-v0.3.0.md) notes.
 
 ## Development
 
