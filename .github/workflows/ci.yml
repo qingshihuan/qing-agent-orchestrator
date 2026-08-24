@@ -106,7 +106,7 @@ jobs:
       - name: Execute the guarded release transformation
         shell: pwsh
         run: |
-          $lines = @(Get-Content -LiteralPath .github/workflows/prepare-v0.5.0.yml)
+          $lines = @(Get-Content -LiteralPath .github/workflows/prepare-v0.5.0.yml -Encoding utf8)
           $start = -1
           $end = -1
           for ($index = 0; $index -lt $lines.Count; $index += 1) {
@@ -114,7 +114,16 @@ jobs:
             if ($start -ge 0 -and $lines[$index].Trim() -eq "'@ | python -") { $end = $index; break }
           }
           if ($start -lt 0 -or $end -le $start) { throw "Could not locate the guarded Python release transformation." }
-          ($lines[($start + 1)..($end - 1)] -join "`n") | python -c "import sys, textwrap; source = textwrap.dedent(sys.stdin.read()); exec(compile(source, '<release-prep>', 'exec'))"
+          $sourceLines = @($lines[($start + 1)..($end - 1)])
+          $indents = @($sourceLines | Where-Object { $_.Trim().Length -gt 0 } | ForEach-Object { $_.Length - $_.TrimStart().Length })
+          if ($indents.Count -eq 0) { throw "The guarded Python release transformation is empty." }
+          $minimumIndent = ($indents | Measure-Object -Minimum).Minimum
+          $dedented = @($sourceLines | ForEach-Object {
+            if ($_.Length -ge $minimumIndent) { $_.Substring($minimumIndent) } else { "" }
+          })
+          $scriptPath = Join-Path $env:RUNNER_TEMP "prepare-v0.5.0.py"
+          [System.IO.File]::WriteAllText($scriptPath, ($dedented -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
+          python $scriptPath
       - run: npm ci --ignore-scripts
       - name: Typecheck and test prepared source
         env:
