@@ -80,3 +80,53 @@ jobs:
             }
             throw "The committed full-skill runtime is out of date."
           }
+
+  normalize-v0-5-0-package:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/release/v0.5.0' &&
+      !contains(github.event.head_commit.message, '[package-normalized]')
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.5.0
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Make runtime package metadata byte-stable
+        shell: pwsh
+        run: |
+          $path = "scripts/package-skill-editions.ps1"
+          $text = [System.IO.File]::ReadAllText($path).Replace("`r`n", "`n").Replace("`r", "`n")
+          $old = 'Copy-Item -LiteralPath (Join-Path $projectRoot "package.json") -Destination (Join-Path $runtimeRoot "package.json") -Force'
+          $new = @'
+          $rootPackageText = [System.IO.File]::ReadAllText((Join-Path $projectRoot "package.json"))
+          $rootPackageText = $rootPackageText.Replace("`r`n", "`n").Replace("`r", "`n")
+          [System.IO.File]::WriteAllText((Join-Path $runtimeRoot "package.json"), $rootPackageText, [System.Text.UTF8Encoding]::new($false))
+          '@.Trim()
+          $count = ([regex]::Matches($text, [regex]::Escape($old))).Count
+          if ($count -ne 1) { throw "Expected one package-copy statement, found $count." }
+          $text = $text.Replace($old, $new)
+          [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Regenerate and validate release packages
+        shell: pwsh
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/normalize-${{ github.run_id }}"
+      - name: Commit deterministic package script and artifacts
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- scripts/package-skill-editions.ps1 .agents/skills/qing-agent-orchestrator-full/runtime artifacts
+          if (git diff --cached --quiet) {
+            Write-Host "Package metadata is already deterministic."
+            exit 0
+          }
+          git commit -m "build: normalize release package metadata [package-normalized]"
+          git push origin HEAD:release/v0.5.0
