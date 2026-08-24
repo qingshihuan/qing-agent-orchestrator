@@ -80,3 +80,160 @@ jobs:
             }
             throw "The committed full-skill runtime is out of date."
           }
+
+  publish-v0-5-0:
+    if: github.event_name == 'pull_request' && github.head_ref == 'release/v0.5.0-pr-publisher'
+    needs:
+      - build-and-test
+      - package-skill
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    runs-on: windows-latest
+    env:
+      GH_PROMPT_DISABLED: "1"
+      TAG: v0.5.0
+      VERSION: 0.5.0
+      NOTES: docs/release-notes-v0.5.0.md
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release metadata and committed artifact checksums
+        shell: pwsh
+        run: |
+          $package = Get-Content -Raw package.json | ConvertFrom-Json
+          $lock = Get-Content -Raw package-lock.json | ConvertFrom-Json
+          $runtime = Get-Content -Raw .agents/skills/qing-agent-orchestrator-full/runtime/package.json | ConvertFrom-Json
+          $versions = @(
+            [string]$package.version,
+            [string]$lock.version,
+            [string]$lock.packages.''.version,
+            [string]$runtime.version
+          )
+          if (@($versions | Where-Object { $_ -ne $env:VERSION }).Count -ne 0) {
+            throw "Version metadata is not synchronized to $env:VERSION: $($versions -join ', ')"
+          }
+          if (-not (Test-Path -LiteralPath $env:NOTES -PathType Leaf)) {
+            throw "Release notes are missing: $env:NOTES"
+          }
+          if ((Get-Content -Raw CHANGELOG.md) -notmatch "(?m)^## $([regex]::Escape($env:VERSION)) - \d{4}-\d{2}-\d{2}$") {
+            throw "CHANGELOG.md has no dated $env:VERSION section."
+          }
+
+          $expected = @(
+            "qing-agent-orchestrator-standard.zip",
+            "qing-agent-orchestrator-full.zip"
+          )
+          $manifest = @{}
+          $lines = @(Get-Content artifacts/SHA256SUMS.txt)
+          if ($lines.Count -ne $expected.Count) {
+            throw "SHA256SUMS.txt must contain exactly two entries."
+          }
+          foreach ($line in $lines) {
+            if ($line -notmatch '^([0-9A-Fa-f]{64})  ([^\\/]+\.zip)$') {
+              throw "Malformed checksum entry: $line"
+            }
+            $name = $matches[2]
+            if ($expected -notcontains $name -or $manifest.ContainsKey($name)) {
+              throw "Unexpected or duplicate release asset: $name"
+            }
+            $manifest[$name] = $matches[1].ToUpperInvariant()
+          }
+          foreach ($name in $expected) {
+            $path = Join-Path artifacts $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Release asset is missing: $path"
+            }
+            if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $manifest[$name]) {
+              throw "Checksum mismatch for $name."
+            }
+          }
+
+      - name: Inspect existing release
+        id: existing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $json = gh release view $env:TAG --json isDraft,url 2>$null
+          $code = $LASTEXITCODE
+          if ($code -eq 0) {
+            $release = $json | ConvertFrom-Json
+            "exists=true" >> $env:GITHUB_OUTPUT
+            "draft=$([string]$release.isDraft).ToLowerInvariant()" >> $env:GITHUB_OUTPUT
+          }
+          else {
+            "exists=false" >> $env:GITHUB_OUTPUT
+            "draft=false" >> $env:GITHUB_OUTPUT
+          }
+          exit 0
+
+      - name: Create, populate, and publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXISTS: ${{ steps.existing.outputs.exists }}
+          DRAFT: ${{ steps.existing.outputs.draft }}
+        run: |
+          $title = "Qing-Agent-Orchestrator $env:TAG"
+          if ($env:EXISTS -ne "true") {
+            gh release create $env:TAG --target main --title $title --notes-file $env:NOTES --draft
+          }
+          elseif ($env:DRAFT -eq "true") {
+            gh release edit $env:TAG --target main --title $title --notes-file $env:NOTES --draft
+          }
+          else {
+            gh release edit $env:TAG --target main --title $title --notes-file $env:NOTES
+          }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create or update $env:TAG."
+          }
+
+          gh release upload $env:TAG `
+            artifacts/qing-agent-orchestrator-standard.zip `
+            artifacts/qing-agent-orchestrator-full.zip `
+            artifacts/SHA256SUMS.txt `
+            --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to upload assets for $env:TAG."
+          }
+
+          gh release edit $env:TAG --draft=false --latest
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to publish $env:TAG."
+          }
+
+      - name: Verify release and report completion
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          $release = gh release view $env:TAG --json tagName,isDraft,isLatest,url,targetCommitish,assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Published release could not be read back."
+          }
+          if ($release.tagName -ne $env:TAG -or $release.isDraft -or -not $release.isLatest) {
+            throw "Published release state is invalid."
+          }
+          $expected = @(
+            "SHA256SUMS.txt",
+            "qing-agent-orchestrator-full.zip",
+            "qing-agent-orchestrator-standard.zip"
+          ) | Sort-Object
+          $actual = @($release.assets | ForEach-Object { $_.name } | Sort-Object)
+          if (@(Compare-Object -ReferenceObject $expected -DifferenceObject $actual).Count -ne 0) {
+            throw "Published release has an unexpected asset set."
+          }
+          if (@($release.assets | Where-Object { [long]$_.size -le 0 }).Count -ne 0) {
+            throw "At least one published asset is empty."
+          }
+          $runUrl = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          gh pr comment $env:PR_NUMBER --body "v0.5.0 was published and verified with all three assets: $($release.url). CI evidence: $runUrl"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Release succeeded, but the PR completion comment failed."
+            exit 0
+          }
