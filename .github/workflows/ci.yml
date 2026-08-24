@@ -114,7 +114,7 @@ jobs:
             if ($start -ge 0 -and $lines[$index].Trim() -eq "'@ | python -") { $end = $index; break }
           }
           if ($start -lt 0 -or $end -le $start) { throw "Could not locate the guarded Python release transformation." }
-          ($lines[($start + 1)..($end - 1)] -join "`n") | python -
+          ($lines[($start + 1)..($end - 1)] -join "`n") | python -c "import sys, textwrap; source = textwrap.dedent(sys.stdin.read()); exec(compile(source, '<release-prep>', 'exec'))"
       - run: npm ci --ignore-scripts
       - name: Typecheck and test prepared source
         env:
