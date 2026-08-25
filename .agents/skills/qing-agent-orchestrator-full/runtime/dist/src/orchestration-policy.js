@@ -8,7 +8,6 @@ export const defaultOrchestrationConfig = {
 };
 const explicitFull = /(?:启动|使用|采用|进入).{0,10}(?:Level\s*3|完整(?:版)?\s*Qing|完整编排|全量编排)|(?:独立|单独)\s*(?:Reviewer|审查(?:者|代理))|(?:使用|启用|启动|切换到?|改用)\s*(?:Codex\s*)?CLI|full(?:\s+qing|\s+orchestration)|independent\s+reviewer|(?:use|enable|start|switch\s+to)\s+(?:codex\s+)?cli/i;
 const explicitDelegation = /(?:使用|创建|生成|启用).{0,10}(?:子(?:智能体|代理)|agent)|(?:delegate|spawn).{0,10}(?:agent|subagent)|Qing\s*Lite|轻量编排/i;
-const highEffect = /删除|清空|全局|系统级|密钥|凭据|私有|认证|付费|购买|支付|发布|推送|上线|部署|生产环境|数据库迁移|delete|global|system[- ]wide|secret|credential|private|authenticated|purchase|payment|publish|push|deploy|production|database\s+migration/i;
 const genuinelyParallel = /多个(?:互相)?独立(?:任务|工作流|工作项)|并行(?:任务|工作流|实现|审查)|parallel\s+(?:tasks?|workstreams?)|independent\s+workstreams?/i;
 const highEffectSignals = new Set([
     "infrastructure",
@@ -28,9 +27,7 @@ export function decideOrchestration(input) {
     const text = input.text.trim();
     const forcedFull = config.mode === "full" || explicitFull.test(text) || input.signals.includes("cli-backend-condition");
     const decomposable = genuinelyParallel.test(text);
-    const riskyEffect = highEffect.test(text)
-        || input.signals.some((signal) => highEffectSignals.has(signal))
-        || input.complexity.risk === "high"
+    const riskyEffect = input.signals.some((signal) => highEffectSignals.has(signal))
         || input.complexity.risk === "critical";
     const crossSystem = input.complexity.scope === "cross-system";
     if (input.route === "chat" && !forcedFull && !decomposable) {

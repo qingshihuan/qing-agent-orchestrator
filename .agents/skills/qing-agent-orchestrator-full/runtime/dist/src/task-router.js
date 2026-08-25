@@ -3,26 +3,48 @@ import { detectCliReasonCodes, routeExecutionMode } from "./execution-mode-route
 import { decideOrchestration } from "./orchestration-policy.js";
 import { createHandoffOrchestrationContract } from "./orchestration-policy.js";
 import { analyzeTaskComplexity } from "./task-analyzer.js";
-const code = /实现|修复|重构|写代码|修改|新增|删除|build|implement|fix|refactor|code|edit/i;
+const code = /实现|修复|重构|写代码|修改|新增|编辑|移除|删除|build|implement|fix|refactor|code|edit|remove/i;
 const analysis = /分析|诊断|审查|评估|检查|核对|只读|analy[sz]e|diagnose|review|assess|inspect|audit|read[- ]only/i;
 const advice = /解释|说明|建议|怎么|是什么|为什么|explain|advise|how|what|why/i;
-const content = /文档|报告|演示|设计稿|document|report|presentation|copywriting/i;
-const infrastructure = /部署|上线|生产环境|数据库迁移|服务器|deploy|production|migration|terraform|kubernetes/i;
-const external = /发送|发布|通知|邮件|消息|send|publish|email|message|notify/i;
+const contentCreation = /(?:写|撰写|生成|创建|制作|更新|修改).{0,16}(?:文档|报告|说明|公告|文案|草稿|演示|设计稿|变更日志|发布说明)|(?:write|draft|create|generate|update|edit).{0,24}(?:document|report|release notes?|announcement|copy|draft|presentation|changelog)/i;
+const deploymentAction = /(?:部署|上线)(?:到|至|进|往|于).{0,20}(?:生产|线上|服务器|集群|环境)|(?:执行|实施|开始|实际|立即|继续).{0,12}(?:部署|上线)|^(?:部署|上线)\b|(?:deploy|release)\s+(?:to|into|on)\s+(?:production|prod|server|cluster|environment)|(?:execute|run|start|perform).{0,20}(?:deploy|deployment|release)/i;
+const externalAction = /(?:发送|通知|邮件)(?:给|到|至).{0,24}|(?:发布|公布)(?:到|至|在).{0,24}(?:网站|平台|社区|外部|线上)|(?:send|notify|email)\s+(?:to\s+)?[\w@]|publish\s+(?:to|on)\s+/i;
 const sequence = /先.+(?:再|然后|之后)|规划.+(?:执行|实现)|plan.+(?:then|and).+(?:implement|execute)/i;
 const orchestrationExecution = /多个(?:互相)?独立(?:任务|工作流|工作项)|并行(?:任务|工作流|实现|审查)|parallel\s+(?:tasks?|workstreams?)|independent\s+workstreams?|(?:启动|使用|采用|进入).{0,10}(?:Level\s*3|完整(?:版)?\s*Qing|完整编排|全量编排)|full(?:\s+qing|\s+orchestration)/i;
-const deleteAction = /删除|清空|移除|delete|remove/i;
+const destructiveTarget = /文件|目录|文件夹|数据|记录|表|字段|列|分支|仓库|资源|账户|用户|缓存|日志|数据库|索引|对象|file|directory|folder|data|record|table|column|field|branch|repository|resource|account|user|cache|logs?|database|index|object/i;
+const codeSymbolTarget = /import|依赖|引用|变量|参数|方法|函数|类|接口|类型|注释|空格|警告|未使用|dead\s+code|unused|variable|argument|method|function|class|interface|type|comment|whitespace|warning/i;
+const pathLikeTarget = /(?:^|\s)(?:[\w.-]+\/)+[\w.-]+|[\w.-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|json|ya?ml|md|txt|css|scss|html)(?:\s|$)/i;
+const deleteVerb = /删除|清空|移除|delete|remove|purge|drop/i;
 const gitPushAction = /(?:Git\s*)?推送|git\s+push|push\s+(?:to|branch|tag|origin)/i;
 const purchaseAction = /购买|支付|付费|purchase|payment|buy\b/i;
 const globalWriteAction = /全局|系统级|系统范围|global|system[- ]wide/i;
 const globalWriteVerb = /修改|写入|更新|编辑|更改|重启|启动|停止|启用|禁用|change|modify|write|update|edit|restart|start|stop|enable|disable/i;
 const secretAction = /使用|读取|访问|导入|use|read|access|load/i;
 const secretTarget = /密钥|凭据|令牌|secret|credential|token/i;
-const privateNetworkAction = /私有|内网|认证(?:接口|网络|服务)|private|internal\s+network|authenticated/i;
+const privateNetworkTarget = /私有网络|内网|认证(?:接口|网络|服务|端点)|private\s+network|internal\s+network|authenticated\s+(?:api|endpoint|network|service)/i;
+const privateNetworkVerb = /访问|读取|连接|调用|access|read|connect|call/i;
 const scopeExpansionAction = /(?:扩大|扩展|新增)(?:任务|工作)?范围|scope\s+expansion|expand\s+(?:the\s+)?scope/i;
-const databaseMigrationAction = /数据库迁移|破坏性迁移|database\s+migration|destructive\s+migration/i;
+const databaseMigrationTarget = /数据库迁移|破坏性迁移|database\s+migration|destructive\s+migration/i;
+const migrationExecutionVerb = /执行|运行|应用|实施|开始|继续|execute|run|apply|perform|start|continue/i;
 const globalInstallAction = /(?:全局|系统级|系统范围).{0,12}(?:安装|升级(?:软件|依赖|工具|程序|包))|(?:安装|升级(?:软件|依赖|工具|程序|包)).{0,12}(?:全局|系统级|系统范围)|npm\s+(?:install|i)\s+-g|(?:install|upgrade).{0,12}(?:global|system[- ]wide)/i;
 const cliExecutionIntent = /接入|配置|搭建|启用|启动|切换|改用|使用|运行|执行|继续|提供|输出|放入|迁移|自动化|完成|integrate|configure|set\s*up|enable|start|switch|use|run|execute|continue|provide|output|move|migrate|automate|complete/i;
+function hasDeleteEffect(text) {
+    if (!deleteVerb.test(text))
+        return false;
+    if (codeSymbolTarget.test(text) && !destructiveTarget.test(text) && !pathLikeTarget.test(text))
+        return false;
+    return destructiveTarget.test(text) || pathLikeTarget.test(text) || /删除|清空|delete|purge|drop/i.test(text);
+}
+function hasDatabaseMigrationEffect(text) {
+    if (!databaseMigrationTarget.test(text))
+        return false;
+    const conceptualOnly = /(?:分析|评估|审查|解释|说明|讨论|设计|方案|文档).{0,16}(?:数据库迁移|破坏性迁移)|(?:analy[sz]e|review|assess|explain|design|plan|document).{0,24}(?:database\s+migration|destructive\s+migration)/i.test(text)
+        && !migrationExecutionVerb.test(text);
+    if (conceptualOnly)
+        return false;
+    return migrationExecutionVerb.test(text)
+        || /^(?:执行|运行|应用|实施)?\s*(?:数据库迁移|破坏性迁移)|^(?:execute|run|apply|perform)?\s*(?:database\s+migration|destructive\s+migration)/i.test(text);
+}
 /** Remove only negated high-risk terms so "不要发布" cannot create a high-risk route signal. */
 export function stripNegatedRiskTerms(text) {
     return text
@@ -41,17 +63,17 @@ export function routeTask(text, options = {}) {
         signals.push("analysis");
     if (advice.test(effective))
         signals.push("advice");
-    if (content.test(effective))
+    if (contentCreation.test(effective))
         signals.push("content");
-    if (infrastructure.test(effective))
+    if (deploymentAction.test(effective))
         signals.push("infrastructure");
-    if (external.test(effective))
+    if (externalAction.test(effective))
         signals.push("external-action");
     if (sequence.test(effective))
         signals.push("plan-then-execute");
     if (orchestrationExecution.test(effective))
         signals.push("orchestration-execution");
-    if (deleteAction.test(effective))
+    if (hasDeleteEffect(effective))
         signals.push("delete-action");
     if (gitPushAction.test(effective))
         signals.push("git-push-action");
@@ -61,11 +83,11 @@ export function routeTask(text, options = {}) {
         signals.push("global-write-action");
     if (secretAction.test(effective) && secretTarget.test(effective))
         signals.push("secret-action");
-    if (privateNetworkAction.test(effective) && /访问|读取|连接|调用|access|read|connect|call/i.test(effective))
+    if (privateNetworkTarget.test(effective) && privateNetworkVerb.test(effective))
         signals.push("private-network-action");
     if (scopeExpansionAction.test(effective))
         signals.push("scope-expansion-action");
-    if (databaseMigrationAction.test(effective))
+    if (hasDatabaseMigrationEffect(effective))
         signals.push("database-migration-action");
     if (globalInstallAction.test(effective))
         signals.push("global-install-action");
