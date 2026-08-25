@@ -2,6 +2,7 @@ import type {
   CliDependencyStatus,
   CliReasonCode,
   ExecutionModeDecision,
+  OrchestrationTier,
   OrchestratorEdition,
   TaskRoute,
 } from "./types.js";
@@ -56,8 +57,9 @@ export function routeExecutionMode(
   text: string,
   edition: OrchestratorEdition,
   taskRoute: TaskRoute,
+  orchestrationTier?: OrchestrationTier,
 ): ExecutionModeDecision {
-  const delegationTarget = taskRoute === "chat"
+  const delegationTarget = taskRoute === "chat" || orchestrationTier === "direct"
     ? "outer-session"
     : visibleTask.test(text)
       ? "visible-task"
@@ -117,7 +119,7 @@ export async function respondToCliRecommendation(
   const dependencyStatus = await inspector.inspect();
   return {
     ...decision,
-    mode: dependencyStatus === "ready" ? "cli-awaiting-handoff-approval" : "cli-setup-required",
+    mode: dependencyStatus === "ready" ? "cli-full-planning" : "cli-setup-required",
     recommendation: { ...decision.recommendation, response: "accepted", dependencyStatus },
     suppressCliPromptForTask: true,
   };

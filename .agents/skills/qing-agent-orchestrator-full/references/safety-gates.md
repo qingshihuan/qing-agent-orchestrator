@@ -1,9 +1,7 @@
-# Safety gates
+# Effect-based safety gates
 
-Allow declared project reads, scoped project writes, and local tests/builds. Require explicit operation approval for deletion, global/system installation, secrets, external network access, messages, pushes, production deployment, destructive migration, or any high/critical risk.
+Allow in-scope reversible project reads/writes, nondestructive local builds/tests, project-local dependencies, and `network_read` only on the exact reviewed hosts `developers.openai.com`, `docs.github.com`, `github.com`, `help.openai.com`, `learn.chatgpt.com`, `openai.com`, `platform.openai.com`, `raw.githubusercontent.com`, and `www.openai.com`. Arbitrary HTTPS is not proof of a public destination. Unlisted hosts, every IP literal, local/private names, URL userinfo, sensitive query names, fragments, authenticated/ambiguous access, and legacy `network_access` require an effect gate.
 
-Deny unresolved broad targets, drive/user/workspace-root recursive deletion, paths outside allowedPaths, secret values in prompts/logs, or attempts to bypass the audit trail. A denial requires a corrected Handoff; it cannot be approved away.
+Require one concise approval bundle only for deletion, global/system installation or writes, secrets/private/authenticated access, external writes/messages/publication, Git push, production deployment, purchase/cost, destructive migration, material scope expansion, unlisted network destinations, or high/critical effects.
 
-The initial CLI recommendation is not approval to inspect, install, configure, authenticate, or execute. Acceptance authorizes only the next declared dependency check. Installation/configuration and the later task execution each keep their own approval boundary.
-
-Gate model substitutions by effects, not model identity. An explicit capability-valid same-backend replacement may reuse existing approvals only when a complete explicit proof records requested operations, allowed paths, sandbox, permissions, and effects as unchanged. Missing/incomplete proof, cross-backend substitution, or any changed permission/effect requires a fresh gate.
+Deny broad/root deletion, path escape, embedded secrets, unresolved targets, and gate/audit bypass. Skip an unnecessary gated effect and continue safe work. Same-backend fallback may reuse gates only with a complete unchanged-scope proof; any backend, operation, path, sandbox, permission, or effect change requires a fresh gate.

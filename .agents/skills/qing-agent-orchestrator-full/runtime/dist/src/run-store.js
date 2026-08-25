@@ -1,4 +1,4 @@
-import { appendFile, mkdir, open, readdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
@@ -9,6 +9,17 @@ function safeSegment(value) {
 }
 function now() {
     return new Date().toISOString();
+}
+async function writeUtf8Atomic(path, contents) {
+    const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+        await writeFile(temporaryPath, contents, "utf8");
+        await rename(temporaryPath, path);
+    }
+    catch (error) {
+        await unlink(temporaryPath).catch(() => undefined);
+        throw error;
+    }
 }
 function defaultProcessMetadata() {
     return {
@@ -77,7 +88,7 @@ class FileRunHandle {
     }
     async persistRecord() {
         this.record = { ...this.record, updatedAt: now() };
-        await writeFile(this.recordPath, JSON.stringify(this.record, null, 2) + "\n", "utf8");
+        await writeUtf8Atomic(this.recordPath, JSON.stringify(this.record, null, 2) + "\n");
     }
     restoreSequence(sequence) {
         this.sequence = Math.max(0, Math.trunc(sequence));

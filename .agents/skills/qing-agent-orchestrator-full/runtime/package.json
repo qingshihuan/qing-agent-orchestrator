@@ -1,8 +1,8 @@
 {
   "name": "qing-agent-orchestrator",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
-  "description": "Desktop-first ChatGPT and Codex workflow with smart routing, gated handoffs, evidence-based review, and optional CLI automation",
+  "description": "Desktop-first adaptive Direct, Lite, and Full ChatGPT/Codex orchestration with effect gates and optional CLI automation",
   "type": "module",
   "engines": {
     "node": ">=18"

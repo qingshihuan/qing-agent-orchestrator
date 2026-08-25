@@ -1,6 +1,6 @@
 # 青-Agent-Orchestrator
 
-[English](README.en.md) · [v0.5.0 发布说明](docs/release-notes-v0.5.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
+[English](README.en.md) · [v0.6.0 发布说明](docs/release-notes-v0.6.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
 **让擅长理解、规划和沟通的模型先把事情想清楚，让擅长代码与工程执行的 Codex 完成实现与验证。**
 
@@ -16,39 +16,37 @@
 
 青通过三个彼此独立的路由来处理这些问题：
 
-1. **任务路由**判断父任务直接回答、内部子任务执行，还是需要结构化工程流程。
+1. **任务/编排路由**先选择 Direct、Lite 或 Full，并为子任务和审查设置明确预算。
 2. **执行方式路由**默认留在桌面；只有 CI、定时/批量、应用关闭后继续、机器可读控制或明确进程隔离等场景才建议 CLI。
 3. **模型路由**按角色、任务类型和复杂度，为委派任务选择实际可用的模型与推理强度，不改变父任务模型。
 
 路由和最终报告只使用一个高层执行归属字段：父任务直接回答为 `executionOwner: ChatGPT`，Relay、内部子任务或 CLI 执行为 `executionOwner: Codex`。它不要求展示具体工具名称，也不建立逐工具账本。
 
-复杂度分析不是“快/慢”二选一：它按 category、Planner/Executor/Reviewer role、risk、single/multi-step/cross-system scope 和命中 signals 计算可解释分数，并给出 `trivial | normal | complex | high-risk`。普通单文件代码执行保持 normal；多步骤、跨系统或高风险工作才升级。
+复杂度分析不是“快/慢”二选一：它按 category、role、risk、single/multi-step/cross-system scope 和 signals 计算可解释分数。复杂度只帮助判断是否值得委派；高风险/外部效果、跨系统、真正并行或显式 Full 请求才进入完整编排。
 
 模型候选明确绑定 `desktop-child` 或 `codex-cli`。桌面候选继续以宿主公布的能力快照为准，内部子任务实际接收 `{ model, reasoning_effort }`，显式值只作用于委派后端，不改变父任务模型。CLI 路径实际接收 `-m` 和 `model_reasoning_effort`；配置层可以表达 `minimal|low|medium|high|xhigh|max|ultra`，但当前安装的 `codex debug models --bundled` 目录才是模型、推理强度和最低客户端版本的权威来源。CLI 候选还必须通过受限、只读、结构化的账户 entitlement 探针，目录有效但账户不可用的组合不会进入健康状态。
 
-这些可用性是当前 host/运行时快照，可能随版本、账户和 entitlement 漂移。普通与高风险任务都采用 completion-first 策略：CLI 候选必须通过现有健康预检，桌面真实 spawn 被拒绝时，父任务可在展示替换 pair 和原因后沿显式、能力有效、同后端 fallback 链继续；链耗尽即失败关闭，绝不隐式选择无关候选。CLI 真实调用只有在错误明确点名当前所选 model ID，并说明该模型 unknown、account/entitlement 不支持、metadata not found 或 unavailable 时才有限回退；认证、进程、超时、取消、输出上限、协议、model output schema 或其他普通错误不重试。每次替换都输出 `executionOwner: Codex`、planned/actual pair、原因、链与尝试，以及完整 scope 证明；缺失或不完整证明要求新 gate。ChatGPT/Codex 订阅访问不等于 Responses API entitlement；本项目没有 provider URL、token 或 API adapter。
+这些可用性是当前 host/运行时快照，可能随版本、账户和 entitlement 漂移。普通与高风险任务都采用 completion-first 策略：CLI 候选必须通过现有健康预检，桌面真实 spawn 被拒绝时，只能沿内部显式、能力有效、同后端 fallback 链继续；链耗尽即失败关闭，绝不隐式选择无关候选。备用 pair 不提前展示，只有替换实际使用后才输出 `executionOwner: Codex`、被拒绝/实际 pair、原因、链与尝试，以及完整 scope 证明。CLI 真实调用只有在错误明确点名当前所选 model ID，并说明该模型 unknown、account/entitlement 不支持、metadata not found 或 unavailable 时才有限回退；认证、进程、超时、取消、输出上限、协议、model output schema 或其他普通错误不重试。缺失或不完整的 scope 证明要求新 gate。ChatGPT/Codex 订阅访问不等于 Responses API entitlement；本项目没有 provider URL、token 或 API adapter。
 
-## v0.5.0 发布重点
+## v0.6.0 发布重点
 
-- **安装目录即权威能力源：** CLI 模型 slug、推理强度和最低客户端版本来自当前安装的 Codex bundled catalog，不再依赖仓库静态表。
-- **双层健康验证：** 目录能力验证通过后，仍需通过只读结构化 entitlement 探针；任一层失败都不会启动真实执行。
-- **跨平台路径失败关闭：** wildcard 不再放行 POSIX、Windows、UNC 绝对路径或父目录穿越。
-- **四平台持续验证：** Windows / Ubuntu × Node.js 18 / 22 均执行 typecheck 和完整测试套件。
-- **发布产物可证明：** 完整 Skill runtime、标准/完整 ZIP、逐文件内容和 SHA-256 都由 CI 与 Release 工作流复验。
+- **三档自适应编排：** Direct 不创建子任务，Lite 最多一个 Executor，Full 才使用独立 Reviewer。
+- **先判断委派、后选择模型：** Direct 不分配子模型；Lite/Full 创建前只展示实际选择的模型和推理强度，只有真的发生替换后才披露回退详情。
+- **按效果审批：** 项目内安全读写、构建、测试和审查清单内的 HTTPS 文档读取无需计划审批；仅暂停真正高风险或无法静态证明的效果。
+- **显式消耗预算：** Lite 固定一个子任务和一次修订，Full 子任务/修订预算可配置；新 Handoff 携带预算合同，`execute` 与旧 `run` 都按合同、当前配置和 Handoff 三者的最小上限执行。
+- **清晰运行状态：** `DIRECT_EXECUTION_REQUIRED`、`LITE_EXECUTION_REQUIRED`、`FULL_EXECUTION_READY` 与 `AWAITING_APPROVAL` 区分“可直接做”和“确实需要批准”。
 
 ## 工作流
 
 ```text
 用户目标
-  → Planner：理解目标并生成精确 Handoff
-  → Approval：用户批准这份合同和必要 gate
-  → Executor：只执行获批范围
-  → Evidence：保存测试、文件、Git 和运行状态证据
-  → Reviewer：给出 PASS / REVISE / HUMAN_REVIEW
+  → Direct：父任务直接完成（0 子任务）
+  → Lite：1 个 Executor → 父任务验证
+  → Full：Handoff → 必要的效果 gate → Executor → 独立 Reviewer
   → 结果返回父任务
 ```
 
-Handoff 会声明目标、工作区、允许路径、操作、交付物、验收标准和测试计划。新路径、新依赖、新权限或新的外部动作必须重新进入 gate，不能从模糊同意中推导授权。
+Handoff 只用于 Full 或需要精确效果合同的任务。安全 Handoff 不需要单独批准；新路径、新权限、重大范围变化或外部效果仍须重新进入 gate。
 
 ## 先选版本
 
@@ -98,7 +96,7 @@ $qing-agent-orchestrator-full
 目标：把仓库检查接入 CI，并提供机器可读状态。
 ```
 
-正常桌面任务会留在父任务中。执行性工作默认使用内部子任务，结果返回父任务；只有用户明确要求可见任务，或确实需要独立观察/隔离时，才新建可见任务。
+普通、安全、单一范围的桌面任务由父任务直接完成。只有有界复杂工作才创建一个内部 Executor；高风险、跨系统或真正可并行的工作才进入 Full。
 
 ## CLI 什么时候才会出现
 
@@ -112,15 +110,16 @@ $qing-agent-orchestrator-full
 - 需要 CLI 独占模型、profile 或环境；
 - 需要独立进程、任务队列或进程隔离。
 
-写代码、任务复杂或运行时间长本身不会触发 CLI。拒绝后会继续完成桌面端能够完成的部分，并且当前任务不重复提示。接受也只会先进入依赖检查；安装、配置和真实任务仍有各自的审批边界。
+写代码、任务复杂或运行时间长本身不会触发 CLI。拒绝后继续桌面端能够完成的部分。接受后只做只读依赖检查；安装/配置及真实高风险效果仍保持审批边界，安全任务不再额外批准 Handoff。
 
 完整版本地命令及安全前提见[可选 Codex CLI 接入](docs/codex-integration.md)。
 
 ## 安全与证据
 
-- 精确 Handoff 批准与操作 gate 分离。
+- 用户目标直接授权范围内可逆的项目读写、构建和测试；Handoff 本身不再构成审批点。
+- `network_read` 只自动放行精确主机 `developers.openai.com`、`docs.github.com`、`github.com`、`help.openai.com`、`learn.chatgpt.com`、`openai.com`、`platform.openai.com`、`raw.githubusercontent.com`、`www.openai.com` 的无凭据、无敏感查询、无片段 HTTPS 读取。任意其他主机、所有 IP literal、内网/本地主机、userinfo、敏感 query 或 fragment 都需要效果批准；旧 `network_access` 始终 gated。
 - Gate 约束操作效果而非模型身份：同后端替换只有在完整显式证明 operations/allowedPaths/sandbox/permissions/effects 全部不变时无需新 gate；证明缺失/不完整、跨后端或任何权限/效果变化都必须重新审批。
-- 删除、全局安装、密钥、外部消息、push、部署和破坏性迁移需要独立批准。
+- 删除、全局/系统写入、密钥/私有数据、外部消息、push、部署、购买、破坏性迁移和重大范围扩展需要一次明确效果批准。
 - `allowedPaths`、Git 前后快照和未申报变化接受审计。
 - 测试由 Relay 父进程按声明命令独立执行并绑定当前 run、Handoff 和 iteration。
 - `mock`、`dry-run`、heartbeat 或进程存活都不能冒充真实完成。
@@ -129,10 +128,10 @@ $qing-agent-orchestrator-full
 
 ## 当前能力边界
 
-`v0.5.0` 包含：
+`v0.6.0` 包含：
 
 - 桌面标准版与桌面优先完整版；
-- Task / Execution Mode Router，以及向真实委派参数落地的 Model Router；
+- Direct / Lite / Full 自适应编排、Execution Mode Router，以及仅为实际委派落地的 Model Router；
 - 基于当前 Codex bundled catalog 的 CLI 模型、推理强度和最低客户端版本验证；
 - 目录验证之后的受限只读 entitlement 健康探针；
 - 唯一的 `executionOwner: ChatGPT | Codex` 高层归属合同；
@@ -155,7 +154,7 @@ $qing-agent-orchestrator-full
 
 SDK/API 集成会作为后续可选分支，不改变面向大多数订阅用户的桌面优先主线。详见[路线图](docs/roadmap.md)。
 
-本版本新增的是可验证的运行时目录、版本、账户预检和发布链路，不把目录解析或 fake-runner 测试当作新的 connected CLI 成功。具体账户仍须在目标安装中通过真实健康探针。详见 [v0.5.0 发布说明](docs/release-notes-v0.5.0.md)。历史说明继续保留在 [v0.4.0 发布说明](docs/release-notes-v0.4.0.md) 与 [v0.3.0 发布说明](docs/release-notes-v0.3.0.md)。
+本版本优化的是审批轮次与编排消耗；没有声称一个固定 token 节省比例，也没有把静态测试当成新的 connected CLI 成功。详见 [v0.6.0 发布说明](docs/release-notes-v0.6.0.md)。历史说明继续保留在 [v0.5.0](docs/release-notes-v0.5.0.md)、[v0.4.0](docs/release-notes-v0.4.0.md) 与 [v0.3.0](docs/release-notes-v0.3.0.md)。
 
 ## 开发与验证
 

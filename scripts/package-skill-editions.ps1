@@ -10,6 +10,11 @@ $fullRoot = Join-Path $projectRoot ".agents\skills\qing-agent-orchestrator-full"
 $artifactsRoot = Join-Path $projectRoot "artifacts"
 $runtimeRoot = Join-Path $fullRoot "runtime"
 $checksumManifest = Join-Path $artifactsRoot "SHA256SUMS.txt"
+$normalizedArchiveTimestamp = [DateTimeOffset]::new(2000, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+$packageTextExtensions = @(".js", ".json", ".md", ".ps1", ".ts", ".txt", ".yaml", ".yml")
+
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Get-RelativeFileList([string] $Root) {
   return @(Get-ChildItem -LiteralPath $Root -Recurse -File | ForEach-Object {
@@ -20,6 +25,107 @@ function Get-RelativeFileList([string] $Root) {
 function Assert-ExactFileSet([string[]] $Expected, [string[]] $Actual, [string] $Label) {
   $difference = @(Compare-Object -ReferenceObject @($Expected | Sort-Object) -DifferenceObject @($Actual | Sort-Object))
   if ($difference.Count -ne 0) { throw "$Label file set mismatch: $($difference | ConvertTo-Json -Compress)" }
+}
+
+function Get-PackageFileBytes([string] $Path) {
+  $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+  if ($packageTextExtensions -contains $extension) {
+    $text = [System.IO.File]::ReadAllText($Path)
+    $text = $text.Replace("`r`n", "`n").Replace("`r", "`n")
+    return [System.Text.UTF8Encoding]::new($false).GetBytes($text)
+  }
+  return [System.IO.File]::ReadAllBytes($Path)
+}
+
+function Get-PackageFileHash([string] $Path) {
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return [Convert]::ToHexString($sha256.ComputeHash((Get-PackageFileBytes $Path)))
+  }
+  finally {
+    $sha256.Dispose()
+  }
+}
+
+function New-DeterministicZip([string] $SourceRoot, [string] $DestinationPath) {
+  $source = [System.IO.Path]::GetFullPath($SourceRoot).TrimEnd("\")
+  $destination = [System.IO.Path]::GetFullPath($DestinationPath)
+  $relativePaths = [string[]]@(Get-RelativeFileList $source)
+  [Array]::Sort($relativePaths, [System.StringComparer]::Ordinal)
+
+  $archiveStream = [System.IO.File]::Open($destination, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+  try {
+    $archive = [System.IO.Compression.ZipArchive]::new(
+      $archiveStream,
+      [System.IO.Compression.ZipArchiveMode]::Create,
+      $false,
+      [System.Text.Encoding]::UTF8
+    )
+    try {
+      foreach ($relativePath in $relativePaths) {
+        $sourcePath = Join-Path $source $relativePath.Replace("/", "\")
+        $entry = $archive.CreateEntry($relativePath, [System.IO.Compression.CompressionLevel]::NoCompression)
+        $entry.LastWriteTime = $normalizedArchiveTimestamp
+        $entry.ExternalAttributes = 0
+        $entryStream = $entry.Open()
+        try {
+          $bytes = Get-PackageFileBytes $sourcePath
+          $entryStream.Write($bytes, 0, $bytes.Length)
+        }
+        finally {
+          $entryStream.Dispose()
+        }
+      }
+    }
+    finally {
+      $archive.Dispose()
+    }
+  }
+  finally {
+    $archiveStream.Dispose()
+  }
+}
+
+function Assert-DeterministicZip([string] $ArchivePath, [string] $Label) {
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+  try {
+    $entries = @($archive.Entries | Where-Object { -not [string]::IsNullOrEmpty($_.Name) })
+    $actualPaths = [string[]]@($entries | ForEach-Object { $_.FullName })
+    $sortedPaths = [string[]]@($actualPaths)
+    [Array]::Sort($sortedPaths, [System.StringComparer]::Ordinal)
+    for ($index = 0; $index -lt $actualPaths.Count; $index++) {
+      if ($actualPaths[$index] -cne $sortedPaths[$index]) {
+        throw "$Label archive entries are not in ordinal order."
+      }
+    }
+    foreach ($entry in $entries) {
+      # ZIP stores a timezone-free DOS timestamp. Compare the serialized wall
+      # clock fields so validation is identical on UTC and non-UTC runners.
+      if ($entry.LastWriteTime.DateTime -ne $normalizedArchiveTimestamp.DateTime) {
+        throw "$Label archive entry has a non-normalized timestamp: $($entry.FullName)"
+      }
+      if ($entry.ExternalAttributes -ne 0) {
+        throw "$Label archive entry has non-normalized external attributes: $($entry.FullName)"
+      }
+      if ($entry.CompressedLength -ne $entry.Length) {
+        throw "$Label archive entry is compressed and may vary across runtime versions: $($entry.FullName)"
+      }
+      if ($packageTextExtensions -contains [System.IO.Path]::GetExtension($entry.FullName).ToLowerInvariant()) {
+        $reader = [System.IO.StreamReader]::new($entry.Open(), [System.Text.UTF8Encoding]::new($false, $true), $true)
+        try {
+          if ($reader.ReadToEnd().Contains("`r")) {
+            throw "$Label archive text entry is not normalized to LF: $($entry.FullName)"
+          }
+        }
+        finally {
+          $reader.Dispose()
+        }
+      }
+    }
+  }
+  finally {
+    $archive.Dispose()
+  }
 }
 
 foreach ($required in @(
@@ -63,6 +169,7 @@ $safeConfig = @'
     }
   },
   "relay": { "maxIterations": 3 },
+  "orchestration": { "mode": "adaptive", "liteMaxChildren": 1, "fullMaxChildren": 3, "liteMaxRevisions": 1, "fullMaxRevisions": 2, "reviewerMode": "risk-based" },
   "runtime": { "stateDirectory": ".qing/runs" },
   "modelRouting": { "mode": "inherit", "healthTtlMs": 3600000, "probeTimeoutMs": 30000, "candidates": [] },
   "security": { "approvedGateIds": [] }
@@ -73,8 +180,8 @@ $safeConfig = $safeConfig.Replace("`r`n", "`n").Replace("`r", "`n")
 
 $standardZip = Join-Path $artifactsRoot "qing-agent-orchestrator-standard.zip"
 $fullZip = Join-Path $artifactsRoot "qing-agent-orchestrator-full.zip"
-Compress-Archive -Path (Join-Path $standardRoot "*") -DestinationPath $standardZip -Force
-Compress-Archive -Path (Join-Path $fullRoot "*") -DestinationPath $fullZip -Force
+New-DeterministicZip $standardRoot $standardZip
+New-DeterministicZip $fullRoot $fullZip
 
 $archiveNames = @(
   "qing-agent-orchestrator-standard.zip",
@@ -87,7 +194,6 @@ $checksumLines = @($archiveNames | ForEach-Object {
 [System.IO.File]::WriteAllText($checksumManifest, ($checksumLines -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
 
 if ($Validate) {
-  Add-Type -AssemblyName System.IO.Compression.FileSystem
   $manifestEntries = @{}
   $manifestLines = @(Get-Content -LiteralPath $checksumManifest)
   if ($manifestLines.Count -ne 2) { throw "Checksum manifest must contain exactly two entries." }
@@ -101,6 +207,7 @@ if ($Validate) {
   foreach ($name in $archiveNames) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $artifactsRoot $name) -Algorithm SHA256).Hash
     if ($actualHash -ne $manifestEntries[$name]) { throw "Checksum manifest hash mismatch: $name" }
+    Assert-DeterministicZip (Join-Path $artifactsRoot $name) $name
   }
   if ([string]::IsNullOrWhiteSpace($ValidationRoot)) {
     $validationBoundary = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd("\")
@@ -148,7 +255,7 @@ if ($Validate) {
     $actualStandardFiles = Get-RelativeFileList $standardExtract
     Assert-ExactFileSet $expectedStandardFiles $actualStandardFiles "Standard archive"
     foreach ($relativePath in $expectedStandardFiles) {
-      $sourceHash = (Get-FileHash -LiteralPath (Join-Path $standardRoot $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
+      $sourceHash = Get-PackageFileHash (Join-Path $standardRoot $relativePath.Replace("/", "\"))
       $archiveHash = (Get-FileHash -LiteralPath (Join-Path $standardExtract $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
       if ($sourceHash -ne $archiveHash) { throw "Standard archive content mismatch: $relativePath" }
     }
@@ -217,7 +324,7 @@ if ($Validate) {
       else {
         Join-Path $fullRoot $relativePath.Replace("/", "\")
       }
-      $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash
+      $sourceHash = Get-PackageFileHash $sourcePath
       $archiveHash = (Get-FileHash -LiteralPath (Join-Path $fullExtract $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
       if ($sourceHash -ne $archiveHash) { throw "Full archive content mismatch: $relativePath" }
     }

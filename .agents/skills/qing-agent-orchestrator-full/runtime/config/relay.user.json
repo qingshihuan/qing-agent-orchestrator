@@ -16,6 +16,7 @@
     }
   },
   "relay": { "maxIterations": 3 },
+  "orchestration": { "mode": "adaptive", "liteMaxChildren": 1, "fullMaxChildren": 3, "liteMaxRevisions": 1, "fullMaxRevisions": 2, "reviewerMode": "risk-based" },
   "runtime": { "stateDirectory": ".qing/runs" },
   "modelRouting": { "mode": "inherit", "healthTtlMs": 3600000, "probeTimeoutMs": 30000, "candidates": [] },
   "security": { "approvedGateIds": [] }

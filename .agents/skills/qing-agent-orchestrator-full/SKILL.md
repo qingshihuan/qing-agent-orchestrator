@@ -1,44 +1,26 @@
 ---
 name: qing-agent-orchestrator-full
-description: Operate the full Qing Level 3 desktop-first Planner-Relay-Executor-Reviewer workflow with an optional guarded Codex CLI backend. Use for reviewed multi-step engineering work when the desktop app should handle normal tasks, while CI, scripts, scheduled or unattended runs, app-close persistence, machine-readable control, CLI-only configured models or environments, explicit process isolation, or an explicit CLI request may benefit from a CLI switch. Recommend the CLI only on those conditions, ask the user to accept or decline, and fall back to desktop when declined.
+description: Operate Qing's adaptive Direct, Lite, and Full desktop-first workflow with an optional guarded Codex CLI backend. Use for reviewed engineering work that may require CI, scheduled or unattended runs, app-close persistence, machine-readable control, CLI-only models/environments, process isolation, or an explicit CLI request. Keep ordinary safe work direct and recommend the CLI only for a documented backend need.
 ---
 
 # Qing Agent Orchestrator Full
 
-Use the desktop app normally. The optional process backend is an enhancement, not an activation dependency.
+Use the smallest sufficient tier before choosing a model:
 
-## Default desktop workflow
+- **Direct:** parent completes safe single-scope work; no child, model allocation, independent Reviewer, Handoff approval, or CLI probe.
+- **Lite:** at most one Executor, parent verification, and at most one revision.
+- **Full:** structured Handoff, bounded Executor budget, independent Reviewer, and bounded revisions; use only for high-risk/global/external effects, cross-system work, genuinely parallel work, release/deploy, explicit Full/Level 3, or an accepted process-backend need.
 
-1. Resolve the exact project and classify the goal with [orchestrator-spec.md](references/orchestrator-spec.md).
-2. Keep advice in the parent and delegate executable work to an internal child task by default. Open a separate visible task only when explicitly requested or needed for observation/isolation. Set high-level `executionOwner` to exactly `ChatGPT` for chat/outer-parent answers and exactly `Codex` for Relay, internal-child, or CLI execution; do not substitute concrete tool names or a per-tool ledger.
-3. Score delegated work deterministically from category, role, risk, scope, and signals. Choose a capability-valid model/reasoning pair only for the delegated backend. For a desktop child, invoke `{ model, reasoning_effort }`; explicit spawn values override the configured subagent defaults. For the optional process backend, pass the selected model through `-m` and the documented reasoning setting. Never switch the current parent model.
-4. Create and present a structured Handoff using [handoff-protocol.md](references/handoff-protocol.md).
-5. Evaluate [safety-gates.md](references/safety-gates.md), wait for the exact Handoff and gate approvals, execute, then apply [reviewer-rules.md](references/reviewer-rules.md). Final reporting must disclose the high-level `ChatGPT`/`Codex` owner and the planned/actual model fallback audit, or state that no substitution occurred, without a concrete tool ledger.
+Read [orchestrator-spec.md](references/orchestrator-spec.md) for deterministic routing, [safety-gates.md](references/safety-gates.md) for effect approvals, and [reviewer-rules.md](references/reviewer-rules.md) for tiered verification. Select a model/reasoning pair only after a tier justifies delegation. Before creation or reactivation, display only the child role/task, `ChatGPT`/`Codex` ownership, explicit model, and reasoning effort. Do not restate the unchanged-parent invariant or preannounce fallback models. If a replacement is actually used after rejection, disclose the reason and actual replacement in the next progress or final result.
 
-## Optional CLI decision
+## Optional process backend
 
-Read [execution-modes.md](references/execution-modes.md) when a goal may need automation or a separate process.
+Read [execution-modes.md](references/execution-modes.md) only when the request needs a separate process. Do not inspect, install, authenticate, probe, or invoke it during ordinary Direct/Lite work. For a documented condition, display `建议切换 CLI 模式`, explain the concrete benefit, and ask the user to accept or decline.
 
-Do not check, install, authenticate, probe, or invoke the CLI during ordinary desktop work. Recommend it only for a documented reason code. Display the exact phrase:
+- Decline: continue all desktop-capable work and disclose only the unavailable backend-specific capability.
+- Accept: run the read-only dependency/authentication check. Missing installation or configuration remains a gated global/system change.
+- Ready: create a fresh Full Handoff and safety report. If every operation is allowed, return `FULL_EXECUTION_READY`; otherwise request one concise bundle of the exact effect gate IDs.
 
-> 建议切换 CLI 模式
+No recommendation, plan, or ready state starts a real process. `--allow-real-execution` remains an explicit invocation safeguard, but safe declared work needs no separate plan approval. Follow [codex-exec.md](references/codex-exec.md).
 
-Explain the concrete benefit and ask the user to accept or decline.
-
-- If declined: record desktop-fallback-selected, suppress repeat prompts for this task, and continue all desktop-capable work. Clearly label any unattended, app-close-persistent, or backend-exclusive part that cannot be provided.
-- If accepted: run scripts/qing.ps1 doctor. This is a dependency check only and must not submit a task.
-  - If unavailable or unauthenticated, point to https://learn.chatgpt.com/docs/codex/cli. Obtain separate approval before any global installation or configuration change.
-  - If ready, create a fresh CLI Handoff and safety-gate report. Wait for its exact approval before execution.
-
-Only after the accepted branch, successful dependency check, exact Handoff approval, and all operation gates may scripts/qing.ps1 execute be used. Follow [codex-exec.md](references/codex-exec.md).
-
-## Invariants
-
-- Coding, complexity, or duration alone never triggers a CLI recommendation.
-- Before creating, spawning, or reactivating every internal child task, display in commentary the child role/task, explicit model, reasoning effort, and that the parent model remains unchanged. If the host cannot explicitly select or verify the model or reasoning effort, state `inherited/unconfirmed` before delegation and never invent values; this also applies to follow-up and reactivated agents.
-- A recommendation never starts a process.
-- Declining always returns to desktop execution.
-- The optional backend never bundles or impersonates a Codex executable.
-- Desktop availability is host-advertised; process-backend availability remains entitlement-dependent until the existing bounded health probe passes. Capability drift fails closed and only explicit same-backend fallback chains are allowed.
-- For ordinary and high-risk work alike, show the replacement model/reasoning pair and rejection reason before retrying or reactivating, then record planned and actual pairs plus chain/attempt context. Reuse existing gates only when a complete explicit scope proof confirms backend, operations, allowed paths, sandbox, permissions, and effects are unchanged; missing/incomplete proof or any change requires a fresh gate.
-- Preserve unrelated work, bounded revisions, evidence-based review, and visible progress.
+Keep the parent model unchanged internally, preserve unrelated work, use only capability-valid same-backend fallbacks, re-gate changed effects, and report real evidence without a per-tool ledger. Report fallback details only when a substitution actually occurred.

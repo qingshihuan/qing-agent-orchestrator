@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://qing.local/schemas/model-route.schema.json",
-  "title": "Qing Task and Model Route",
+  "title": "Qing Adaptive Orchestration and Model Route",
   "type": "object",
   "additionalProperties": false,
-  "required": ["executionOwner", "route", "confidence", "category", "reasons", "signals", "execution", "complexity", "status", "handoffId", "modelSelection"],
+  "required": ["executionOwner", "route", "confidence", "category", "reasons", "signals", "execution", "complexity", "orchestration", "status", "handoffId", "modelSelection"],
   "properties": {
     "executionOwner": { "$ref": "#/$defs/executionOwner" },
     "route": { "enum": ["chat", "codex", "hybrid"] },
@@ -13,6 +13,7 @@
     "reasons": { "type": "array", "items": { "type": "string" } },
     "signals": { "type": "array", "items": { "type": "string" } },
     "complexity": { "$ref": "#/$defs/complexity" },
+    "orchestration": { "$ref": "#/$defs/orchestration" },
     "execution": {
       "type": "object",
       "additionalProperties": false,
@@ -20,7 +21,7 @@
       "properties": {
         "executionOwner": { "$ref": "#/$defs/executionOwner" },
         "edition": { "enum": ["standard", "full"] },
-        "mode": { "enum": ["desktop-native", "cli-recommended", "cli-setup-required", "cli-awaiting-handoff-approval", "desktop-fallback"] },
+        "mode": { "enum": ["desktop-native", "cli-recommended", "cli-setup-required", "cli-full-planning", "desktop-fallback"] },
         "delegationTarget": { "enum": ["outer-session", "internal-child", "visible-task"] },
         "returnsToParent": { "type": "boolean" },
         "currentParentModelUnchanged": { "const": true },
@@ -49,7 +50,7 @@
         "limitations": { "type": "array", "items": { "type": "string" } }
       }
     },
-    "status": { "enum": ["CHAT_RESPONSE_REQUIRED", "DESKTOP_EXECUTION_REQUIRED", "CLI_RECOMMENDATION_REQUIRED", "CLI_SETUP_REQUIRED", "AWAITING_APPROVAL"] },
+    "status": { "enum": ["DIRECT_EXECUTION_REQUIRED", "LITE_EXECUTION_REQUIRED", "FULL_EXECUTION_READY", "CLI_RECOMMENDATION_REQUIRED", "CLI_SETUP_REQUIRED", "AWAITING_APPROVAL", "DENIED"] },
     "handoffId": { "type": ["string", "null"] },
     "handoffPath": { "type": ["string", "null"] },
     "modelProbe": { "enum": ["not-started", "not-applicable", "dependency-check-only", "skipped-by-explicit-flag", "completed"] },
@@ -83,8 +84,9 @@
         }
       ]
     },
+    "reviewerModelSelection": { "$ref": "#/properties/modelSelection" },
     "delegationInvocation": {
-      "type": "object",
+      "type": ["object", "null"],
       "additionalProperties": false,
       "required": ["executionOwner", "backend", "delegationTarget", "parentModelUnchanged", "modelSelectionScope", "override", "spawnAgent", "fieldMapping", "inheritedDefaults", "precedence", "fallbackPlan", "retryProtocol"],
       "properties": {
@@ -139,14 +141,18 @@
           ]
         }
       }
-    }
+    },
+    "reviewerInvocation": { "type": ["object", "null"] }
   },
   "allOf": [
     {
-      "if": { "properties": { "route": { "const": "chat" } }, "required": ["route"] },
+      "if": { "properties": { "orchestration": { "properties": { "tier": { "const": "direct" } }, "required": ["tier"] } }, "required": ["orchestration"] },
       "then": {
         "properties": {
           "executionOwner": { "const": "ChatGPT" },
+          "modelSelection": { "type": "null" },
+          "reviewerModelSelection": { "type": "null" },
+          "delegationInvocation": { "type": "null" },
           "execution": {
             "properties": { "executionOwner": { "const": "ChatGPT" } },
             "required": ["executionOwner"]
@@ -155,13 +161,45 @@
       }
     },
     {
-      "if": { "properties": { "route": { "enum": ["codex", "hybrid"] } }, "required": ["route"] },
+      "if": { "properties": { "orchestration": { "properties": { "tier": { "enum": ["lite", "full"] } }, "required": ["tier"] } }, "required": ["orchestration"] },
       "then": {
         "properties": {
           "executionOwner": { "const": "Codex" },
           "execution": {
             "properties": { "executionOwner": { "const": "Codex" } },
             "required": ["executionOwner"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "orchestration": { "properties": { "tier": { "const": "lite" } }, "required": ["tier"] } }, "required": ["orchestration"] },
+      "then": {
+        "properties": {
+          "orchestration": {
+            "properties": {
+              "childAgentBudget": { "const": 1 },
+              "independentReviewer": { "const": false },
+              "maxRevisions": { "const": 1 },
+              "parentVerification": { "const": true },
+              "modelSelectionRequired": { "const": true }
+            }
+          },
+          "reviewerModelSelection": { "type": "null" },
+          "reviewerInvocation": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "orchestration": { "properties": { "tier": { "const": "full" } }, "required": ["tier"] } }, "required": ["orchestration"] },
+      "then": {
+        "properties": {
+          "orchestration": {
+            "properties": {
+              "childAgentBudget": { "type": "integer", "minimum": 1 },
+              "independentReviewer": { "const": true },
+              "modelSelectionRequired": { "const": true }
+            }
           }
         }
       }
@@ -264,6 +302,22 @@
         "scope": { "enum": ["single", "multi-step", "cross-system"] },
         "signals": { "type": "array", "items": { "type": "string" } },
         "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "orchestration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tier", "childAgentBudget", "independentReviewer", "maxRevisions", "parentVerification", "modelSelectionRequired", "approvalPolicy", "decomposable", "reasons"],
+      "properties": {
+        "tier": { "enum": ["direct", "lite", "full"] },
+        "childAgentBudget": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "independentReviewer": { "type": "boolean" },
+        "maxRevisions": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "parentVerification": { "type": "boolean" },
+        "modelSelectionRequired": { "type": "boolean" },
+        "approvalPolicy": { "const": "effects-only" },
+        "decomposable": { "type": "boolean" },
+        "reasons": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
       }
     },
     "cliReasonCode": {

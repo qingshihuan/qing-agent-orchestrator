@@ -1,4 +1,4 @@
 interface:
   display_name: "青-Agent-Orchestrator 桌面版"
-  short_description: "完全在桌面应用内完成规划、分派、审批、执行和证据审查"
-  default_prompt: "Use $qing-agent-orchestrator to plan, delegate, execute, and review this task entirely inside the desktop app."
+  short_description: "桌面内自适应 Direct、Lite、Full，并只审批高风险效果"
+  default_prompt: "Use $qing-agent-orchestrator to choose the smallest safe Direct, Lite, or Full workflow and complete this task in the desktop app."

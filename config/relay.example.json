@@ -18,6 +18,14 @@
   "relay": {
     "maxIterations": 3
   },
+  "orchestration": {
+    "mode": "adaptive",
+    "liteMaxChildren": 1,
+    "fullMaxChildren": 3,
+    "liteMaxRevisions": 1,
+    "fullMaxRevisions": 2,
+    "reviewerMode": "risk-based"
+  },
   "modelRouting": {
     "mode": "explicit",
     "healthTtlMs": 3600000,
