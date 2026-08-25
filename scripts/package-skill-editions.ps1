@@ -11,6 +11,7 @@ $artifactsRoot = Join-Path $projectRoot "artifacts"
 $runtimeRoot = Join-Path $fullRoot "runtime"
 $checksumManifest = Join-Path $artifactsRoot "SHA256SUMS.txt"
 $normalizedArchiveTimestamp = [DateTimeOffset]::new(2000, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+$packageTextExtensions = @(".js", ".json", ".md", ".ps1", ".ts", ".txt", ".yaml", ".yml")
 
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -24,6 +25,26 @@ function Get-RelativeFileList([string] $Root) {
 function Assert-ExactFileSet([string[]] $Expected, [string[]] $Actual, [string] $Label) {
   $difference = @(Compare-Object -ReferenceObject @($Expected | Sort-Object) -DifferenceObject @($Actual | Sort-Object))
   if ($difference.Count -ne 0) { throw "$Label file set mismatch: $($difference | ConvertTo-Json -Compress)" }
+}
+
+function Get-PackageFileBytes([string] $Path) {
+  $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+  if ($packageTextExtensions -contains $extension) {
+    $text = [System.IO.File]::ReadAllText($Path)
+    $text = $text.Replace("`r`n", "`n").Replace("`r", "`n")
+    return [System.Text.UTF8Encoding]::new($false).GetBytes($text)
+  }
+  return [System.IO.File]::ReadAllBytes($Path)
+}
+
+function Get-PackageFileHash([string] $Path) {
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return [Convert]::ToHexString($sha256.ComputeHash((Get-PackageFileBytes $Path)))
+  }
+  finally {
+    $sha256.Dispose()
+  }
 }
 
 function New-DeterministicZip([string] $SourceRoot, [string] $DestinationPath) {
@@ -47,12 +68,11 @@ function New-DeterministicZip([string] $SourceRoot, [string] $DestinationPath) {
         $entry.LastWriteTime = $normalizedArchiveTimestamp
         $entry.ExternalAttributes = 0
         $entryStream = $entry.Open()
-        $sourceStream = [System.IO.File]::OpenRead($sourcePath)
         try {
-          $sourceStream.CopyTo($entryStream)
+          $bytes = Get-PackageFileBytes $sourcePath
+          $entryStream.Write($bytes, 0, $bytes.Length)
         }
         finally {
-          $sourceStream.Dispose()
           $entryStream.Dispose()
         }
       }
@@ -89,6 +109,17 @@ function Assert-DeterministicZip([string] $ArchivePath, [string] $Label) {
       }
       if ($entry.CompressedLength -ne $entry.Length) {
         throw "$Label archive entry is compressed and may vary across runtime versions: $($entry.FullName)"
+      }
+      if ($packageTextExtensions -contains [System.IO.Path]::GetExtension($entry.FullName).ToLowerInvariant()) {
+        $reader = [System.IO.StreamReader]::new($entry.Open(), [System.Text.UTF8Encoding]::new($false, $true), $true)
+        try {
+          if ($reader.ReadToEnd().Contains("`r")) {
+            throw "$Label archive text entry is not normalized to LF: $($entry.FullName)"
+          }
+        }
+        finally {
+          $reader.Dispose()
+        }
       }
     }
   }
@@ -224,7 +255,7 @@ if ($Validate) {
     $actualStandardFiles = Get-RelativeFileList $standardExtract
     Assert-ExactFileSet $expectedStandardFiles $actualStandardFiles "Standard archive"
     foreach ($relativePath in $expectedStandardFiles) {
-      $sourceHash = (Get-FileHash -LiteralPath (Join-Path $standardRoot $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
+      $sourceHash = Get-PackageFileHash (Join-Path $standardRoot $relativePath.Replace("/", "\"))
       $archiveHash = (Get-FileHash -LiteralPath (Join-Path $standardExtract $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
       if ($sourceHash -ne $archiveHash) { throw "Standard archive content mismatch: $relativePath" }
     }
@@ -293,7 +324,7 @@ if ($Validate) {
       else {
         Join-Path $fullRoot $relativePath.Replace("/", "\")
       }
-      $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash
+      $sourceHash = Get-PackageFileHash $sourcePath
       $archiveHash = (Get-FileHash -LiteralPath (Join-Path $fullExtract $relativePath.Replace("/", "\")) -Algorithm SHA256).Hash
       if ($sourceHash -ne $archiveHash) { throw "Full archive content mismatch: $relativePath" }
     }
