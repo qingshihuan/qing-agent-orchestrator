@@ -19,9 +19,27 @@ const categoryWeight: Record<TaskCategory, number> = {
 };
 const roleWeight: Record<ModelRole, number> = { planner: 0, reviewer: 1, executor: 1 };
 const riskWeight: Record<RiskLevel, number> = { low: 0, medium: 2, high: 5, critical: 7 };
+const highRiskSignals = new Set([
+  "infrastructure",
+  "external-action",
+  "delete-action",
+  "git-push-action",
+  "purchase-action",
+  "global-write-action",
+  "secret-action",
+  "private-network-action",
+  "scope-expansion-action",
+  "database-migration-action",
+  "global-install-action",
+]);
+const complexitySignals = new Set([
+  "plan-then-execute",
+  "orchestration-execution",
+  ...highRiskSignals,
+]);
 
-function inferRisk(text: string, category: TaskCategory): RiskLevel {
-  if (/生产|production|删除|delete|密钥|secret|凭据|credential|支付|payment|迁移|migration/i.test(text)) return "high";
+function inferRisk(category: TaskCategory, routeSignals: string[]): RiskLevel {
+  if (routeSignals.some((signal) => highRiskSignals.has(signal))) return "high";
   if (category === "infrastructure" || category === "external_action" || category === "mixed") return "medium";
   return category === "code_change" || category === "content_creation" ? "medium" : "low";
 }
@@ -35,21 +53,22 @@ export function analyzeTaskComplexity(input: TaskAnalyzerInput): TaskComplexityA
   reasons.push(`category:${input.category}=+${categoryWeight[input.category]}`);
   score += roleWeight[input.role];
   reasons.push(`role:${input.role}=+${roleWeight[input.role]}`);
-  const risk = input.risk ?? inferRisk(text, input.category);
+  const risk = input.risk ?? inferRisk(input.category, routeSignals);
   score += riskWeight[risk];
   reasons.push(`risk:${risk}=+${riskWeight[risk]}`);
 
   const crossSystem = /跨|多个仓库|多仓库|前后端|数据库.+(?:服务|应用)|CI|CD|pipeline|multiple repos?|cross[- ]system/i.test(text);
   const multiStep = routeSignals.includes("plan-then-execute") || /先.+(?:再|然后|之后)|并且|以及|then|and then/i.test(text);
-  const scope = crossSystem ? "cross-system" : multiStep || routeSignals.length >= 3 ? "multi-step" : "single";
+  const scope = crossSystem ? "cross-system" : multiStep ? "multi-step" : "single";
   const scopeWeight = scope === "cross-system" ? 3 : scope === "multi-step" ? 2 : 0;
   score += scopeWeight;
   reasons.push(`scope:${scope}=+${scopeWeight}`);
 
-  const additionalSignals = Math.min(2, Math.max(0, routeSignals.length - 1));
+  const distinctComplexitySignals = routeSignals.filter((signal) => complexitySignals.has(signal));
+  const additionalSignals = Math.min(2, distinctComplexitySignals.length);
   if (additionalSignals > 0) {
     score += additionalSignals;
-    reasons.push(`route-signals:${routeSignals.length}=+${additionalSignals}`);
+    reasons.push(`complexity-signals:${distinctComplexitySignals.length}=+${additionalSignals}`);
   }
   if (text.length >= 240) {
     score += 1;
