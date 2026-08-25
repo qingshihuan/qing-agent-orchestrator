@@ -19,6 +19,7 @@ import { selectModelCandidate } from "./model-router.js";
 import { analyzeTaskComplexity } from "./task-analyzer.js";
 import { createPendingDispatchHandoff, routeTask, type TaskRouteDecision } from "./task-router.js";
 import { respondToCliRecommendation } from "./execution-mode-router.js";
+import { bindHandoffOrchestration, resolveExecutableOrchestrationLimits } from "./orchestration-policy.js";
 import type { ExecutionResult, Handoff, ModelBackend, ModelRole, ModelSelection, OrchestratorEdition, RelayConfig } from "./types.js";
 import { validateExecutionResult, validateHandoff } from "./validation.js";
 import { resolveSafeWorkspace } from "./workspace.js";
@@ -78,6 +79,8 @@ function plannerOptions(config: RelayConfig, bundle?: SelectedModelBundle) {
 
 async function configuredModel(config: RelayConfig, role: ModelRole, backend: ModelBackend, task: string, decision: TaskRouteDecision): Promise<SelectedModelBundle | undefined> {
   if (config.modelRouting.mode === "inherit") return undefined;
+  if (!decision.orchestration.modelSelectionRequired || decision.orchestration.childAgentBudget === 0) return undefined;
+  if (role === "reviewer" && !decision.orchestration.independentReviewer) return undefined;
   if (decision.route === "chat") throw new Error("Chat routing cannot select a Codex model.");
   const complexity = analyzeTaskComplexity({ text: task, category: decision.category, role, routeSignals: decision.signals });
   if (backend === "desktop-child") {
@@ -156,8 +159,8 @@ function usage(): string {
     "  cancel <run-id> [--config <file>]",
     "  start --task <natural-language goal> --workspace <project-directory> [--planner auto|codex|local] [--out <handoff.json>] [--config <file>]",
     "       creates and saves a read-only planned Handoff; it never executes the task",
-    "  execute <handoff.json> --approve-handoff <handoff-id> --allow-real-execution [--approve <gate-id>]... [--config <file>]",
-    "       executes only the exact approved Handoff and any separately approved safety gates",
+    "  execute <handoff.json> --allow-real-execution [--approve-handoff <handoff-id>] [--approve <gate-id>]... [--config <file>]",
+    "       safe declared work needs no plan approval; effect gates still require their exact IDs",
     "  validate <handoff.json>",
     "  classify <task text>",
     "  gate <handoff.json> [--approve <gate-id>]...",
@@ -204,7 +207,8 @@ async function main(): Promise<void> {
     const requestedWorkspace = flagValue(args, "--workspace");
     if (!task) throw new Error("dispatch requires --task <natural-language goal>");
     if (!requestedWorkspace) throw new Error("dispatch requires --workspace <project-directory>");
-    const decision = routeTask(task, { edition: editionValue(args) });
+    const config = await loadConfig(configPath(args));
+    const decision = routeTask(task, { edition: editionValue(args), orchestration: config.orchestration });
     let execution = decision.execution;
     const cliResponse = flagValue(args, "--cli-response");
     if (cliResponse !== undefined && cliResponse !== "accept" && cliResponse !== "decline") {
@@ -217,36 +221,39 @@ async function main(): Promise<void> {
       }
       if (cliResponse === "decline") {
         execution = await respondToCliRecommendation(execution, "decline");
-        const config = await loadConfig(configPath(args));
-        const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
-        print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Continue in the desktop parent/internal-child workflow. If a real spawn rejects the selected pair, display the next explicit same-backend replacement and record the reason before retrying. Do not prompt for or invoke CLI again for this task." });
-        return;
-      }
-      const config = await loadConfig(configPath(args));
-      execution = await respondToCliRecommendation(execution, "accept", {
-        inspect: async () => {
-          const report = await new CodexExecExecutor(codexOptions(config)).doctor(true);
-          return !report.available ? "missing" : !report.authenticated ? "authentication-required" : "ready";
-        },
-      });
-      if (execution.mode === "cli-setup-required") {
-        print({ ...decision, execution, status: "CLI_SETUP_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "dependency-check-only", nextStep: `Follow ${execution.recommendation?.installGuide}; any installation or configuration change needs its own approval. No task was started.` });
-        return;
+      } else {
+        execution = await respondToCliRecommendation(execution, "accept", {
+          inspect: async () => {
+            const report = await new CodexExecExecutor(codexOptions(config)).doctor(true);
+            return !report.available ? "missing" : !report.authenticated ? "authentication-required" : "ready";
+          },
+        });
+        if (execution.mode === "cli-setup-required") {
+          print({ ...decision, execution, status: "CLI_SETUP_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "dependency-check-only", nextStep: `Follow ${execution.recommendation?.installGuide}; any installation or configuration change needs its own approval. No task was started.` });
+          return;
+        }
       }
     } else if (cliResponse) {
       throw new Error("--cli-response is valid only when a full-edition CLI condition is pending.");
     }
-    if (decision.route === "chat") {
-      print({ ...decision, execution, status: "CHAT_RESPONSE_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "not-applicable", nextStep: "The outer ChatGPT/Codex session must answer directly. No execution child or CLI task was created." });
+    if (decision.orchestration.tier === "direct") {
+      print({ ...decision, execution, status: "DIRECT_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, reviewerModelSelection: null, delegationInvocation: null, modelProbe: "not-applicable", nextStep: "Complete and, when executable, verify the in-scope work directly. No child, model allocation, Handoff approval, or CLI task was created." });
       return;
     }
-    if (execution.mode === "desktop-native") {
-      const config = await loadConfig(configPath(args));
+    if (execution.mode === "desktop-native" || execution.mode === "desktop-fallback") {
       const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
-      print({ ...decision, execution, status: "DESKTOP_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Create an internal desktop child task with the displayed explicit override (or configured defaults in inherit mode). If a real spawn rejects the pair, display the next explicit same-backend replacement and record the reason before retrying. Return the result to the unchanged parent; no CLI task was created." });
+      if (decision.orchestration.tier === "lite") {
+        print({ ...decision, execution, status: "LITE_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, reviewerModelSelection: null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Create at most one Executor child, perform targeted parent verification, and allow at most one revision; no independent Reviewer or plan approval is required." });
+        return;
+      }
+      const workspace = await resolveSafeWorkspace(runtimeRoot, requestedWorkspace);
+      const handoff = createPendingDispatchHandoff(task, workspace, decision);
+      const gate = evaluateSafetyGate(handoff);
+      const reviewerBundle = await configuredModel(config, "reviewer", "desktop-child", task, decision);
+      print({ ...decision, execution, status: gate.outcome === "ALLOW" ? "FULL_EXECUTION_READY" : gate.outcome === "DENY" ? "DENIED" : "AWAITING_APPROVAL", handoffId: handoff.id, handoffPath: null, handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, reviewerModelSelection: reviewerBundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), reviewerInvocation: desktopDelegationContract(reviewerBundle?.selection ?? null), modelProbe: "not-applicable", nextStep: gate.outcome === "ALLOW" ? "Run the bounded Executor and independent Reviewer workflow now; no plan approval is needed." : gate.outcome === "DENY" ? "Revise the unsafe Handoff; denial cannot be approved away." : "Request one approval bundle containing only the displayed effect gate IDs, then continue." });
+      if (gate.outcome === "DENY") process.exitCode = 2;
       return;
     }
-    const config = await loadConfig(configPath(args));
     const workspace = await resolveSafeWorkspace(runtimeRoot, requestedWorkspace);
     let planned: PlannedHandoff;
     let bundle: SelectedModelBundle | undefined;
@@ -256,9 +263,11 @@ async function main(): Promise<void> {
       bundle = await configuredModel(config, "planner", "codex-cli", task, decision);
       planned = await new CodexHandoffPlanner(plannerOptions(config, bundle)).plan(task, workspace);
     }
+    planned = { ...planned, handoff: bindHandoffOrchestration(planned.handoff, decision.orchestration) };
     const handoffPath = await saveHandoff(planned.handoff, runtimeRoot, config.runtime.stateDirectory, flagValue(args, "--out"));
     const gate = evaluateSafetyGate(planned.handoff);
-    print({ ...decision, execution, status: "AWAITING_APPROVAL", handoffId: planned.handoff.id, handoffPath, handoff: planned.handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, modelHealth: bundle?.health ?? [], modelProbe: args.includes("--no-model-probe") ? "skipped-by-explicit-flag" : "completed", nextStep: `Review this exact Handoff, then approve ID ${planned.handoff.id}. Dispatch never executes it.` });
+    print({ ...decision, execution, status: gate.outcome === "ALLOW" ? "FULL_EXECUTION_READY" : gate.outcome === "DENY" ? "DENIED" : "AWAITING_APPROVAL", handoffId: planned.handoff.id, handoffPath, handoff: planned.handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, modelHealth: bundle?.health ?? [], modelProbe: args.includes("--no-model-probe") ? "skipped-by-explicit-flag" : "completed", nextStep: gate.outcome === "ALLOW" ? "The safe Handoff is ready without plan approval. Dispatch still never executes it." : gate.outcome === "DENY" ? "Revise the Handoff; denial cannot be overridden." : "Approve only the displayed effect gate IDs. Dispatch never executes the task." });
+    if (gate.outcome === "DENY") process.exitCode = 2;
     return;
   }
 
@@ -297,17 +306,27 @@ async function main(): Promise<void> {
     if (!["auto", "codex", "local"].includes(plannerMode)) {
       throw new Error("--planner must be auto, codex, or local");
     }
+    const decision = routeTask(task, { edition: "full", orchestration: config.orchestration });
+    if (decision.orchestration.tier === "direct") {
+      print({ ...decision, status: "DIRECT_EXECUTION_REQUIRED", handoffPath: null, plannerSource: null, modelSelection: null, modelProbe: "not-applicable", nextStep: "Complete this task directly. Start did not create a Handoff, allocate a model, probe the CLI, or invoke any Planner." });
+      return;
+    }
+    if (decision.orchestration.tier === "lite") {
+      const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
+      print({ ...decision, status: "LITE_EXECUTION_REQUIRED", handoffPath: null, plannerSource: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Use at most one desktop Executor child and parent verification. Start did not invoke the connected or local Handoff Planner." });
+      return;
+    }
     let planned: PlannedHandoff;
     let plannerSource: "codex" | "local-fallback";
     let plannerWarning: string | undefined;
+    let bundle: SelectedModelBundle | undefined;
     if (plannerMode === "local") {
       planned = await planLocally(task, workspace, runtimeRoot);
       plannerSource = "local-fallback";
       plannerWarning = "The conservative local Planner was selected explicitly; no model planning call was made.";
     } else {
       try {
-        const decision = routeTask(task);
-        const bundle = decision.route === "chat" ? undefined : await configuredModel(config, "planner", "codex-cli", task, decision);
+        bundle = await configuredModel(config, "planner", "codex-cli", task, decision);
         planned = await new CodexHandoffPlanner(plannerOptions(config, bundle)).plan(task, workspace);
         plannerSource = "codex";
       } catch (error) {
@@ -318,6 +337,7 @@ async function main(): Promise<void> {
         plannerWarning = `Connected Codex Planner was unavailable. Used the conservative local fallback. ${message.slice(-500)}`;
       }
     }
+    planned = { ...planned, handoff: bindHandoffOrchestration(planned.handoff, decision.orchestration) };
     const handoffPath = await saveHandoff(
       planned.handoff,
       runtimeRoot,
@@ -326,16 +346,20 @@ async function main(): Promise<void> {
     );
     const gate = evaluateSafetyGate(planned.handoff);
     print({
-      status: gate.outcome === "DENY" ? "DENIED" : "AWAITING_APPROVAL",
+      ...decision,
+      status: gate.outcome === "DENY" ? "DENIED" : gate.outcome === "ALLOW" ? "FULL_EXECUTION_READY" : "AWAITING_APPROVAL",
       handoffPath,
       plannerSource,
+      modelSelection: bundle?.selection ?? null,
       ...(plannerWarning ? { plannerWarning } : {}),
       handoff: planned.handoff,
       safetyGate: gate,
       nextStep:
         gate.outcome === "DENY"
           ? "Revise the Handoff. A denial cannot be overridden."
-          : `After a person approves this exact plan, run execute with --approve-handoff ${planned.handoff.id}. Add only the gate IDs that person explicitly approved.`,
+          : gate.outcome === "ALLOW"
+            ? "The declared safe work is ready for execute without a separate plan approval. Real execution still requires --allow-real-execution."
+            : "Approve only the displayed effect gate IDs, then pass those exact IDs with --approve. A separate plan approval is not required.",
     });
     if (gate.outcome === "DENY") process.exitCode = 2;
     return;
@@ -355,26 +379,29 @@ async function main(): Promise<void> {
 
   if (command === "execute") {
     const approvedHandoff = flagValue(args, "--approve-handoff");
-    if (approvedHandoff !== handoff.id) {
-      throw new Error(`Execution requires --approve-handoff ${handoff.id} after a person reviews this exact Handoff.`);
-    }
+    if (approvedHandoff !== undefined && approvedHandoff !== handoff.id) throw new Error(`--approve-handoff, when supplied for legacy compatibility, must equal ${handoff.id}.`);
     const config = await loadConfig(configPath(args));
-    const decision = routeTask(handoff.objective);
+    const approvals = [...config.security.approvedGateIds, ...flagValues(args, "--approve")];
+    const gate = evaluateSafetyGate(handoff, approvals);
+    if (gate.outcome === "DENY") throw new Error("Execution denied by the safety gate; revise the Handoff.");
+    if (gate.outcome === "REQUIRE_APPROVAL") throw new Error(`Execution requires the remaining effect gate IDs: ${gate.decisions.filter(({ decision: outcome }) => outcome === "REQUIRE_APPROVAL").map(({ gateId }) => gateId).join(", ")}`);
+    const budgetDecision = routeTask(handoff.objective, { orchestration: config.orchestration });
+    const limits = resolveExecutableOrchestrationLimits(handoff, budgetDecision.orchestration, config.orchestration, config.relay.maxIterations);
+    const decision = routeTask(handoff.objective, { orchestration: { ...config.orchestration, mode: "full" } });
     if (decision.route === "chat") throw new Error("A chat-routed goal cannot start the Codex Executor.");
     const bundle = await configuredModel(config, "executor", "codex-cli", handoff.objective, decision);
-    const approvals = [...config.security.approvedGateIds, ...flagValues(args, "--approve")];
     const executor = createExecutor("codex-exec", config, args, bundle);
     const relay = new Relay(executor, new RuleBasedReviewer());
     const runHandle = await new RunStore(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory)).createRun(handoff);
     const result = await relay.run(handoff, {
-      maxIterations: config.relay.maxIterations,
+      maxIterations: limits.maxIterations,
       approvedGateIds: approvals,
       runHandle,
     });
     const finalModelSelection = executor instanceof CodexExecExecutor
       ? executor.finalModelSelection ?? bundle?.selection ?? null
       : bundle?.selection ?? null;
-    print({ ...result, executionOwner: "Codex", modelSelection: finalModelSelection });
+    print({ ...result, executionOwner: "Codex", modelSelection: finalModelSelection, orchestration: limits.contract, executionBudgetSource: limits.source, maxIterationsBudget: limits.maxIterations });
     if (result.status !== "COMPLETED") process.exitCode = 4;
     return;
   }
@@ -402,16 +429,18 @@ async function main(): Promise<void> {
   if (command === "run") {
     const config = await loadConfig(configPath(args));
     const mode = flagValue(args, "--executor") ?? config.executor.mode;
-    if (mode === "codex-exec") throw new Error("Legacy run cannot start real codex-exec. Use execute with the exact --approve-handoff ID.");
+    if (mode === "codex-exec") throw new Error("Legacy run cannot start real codex-exec. Use execute with --allow-real-execution and any required effect gate IDs.");
     const approvals = [...config.security.approvedGateIds, ...flagValues(args, "--approve")];
+    const decision = routeTask(handoff.objective, { orchestration: config.orchestration });
+    const limits = resolveExecutableOrchestrationLimits(handoff, decision.orchestration, config.orchestration, config.relay.maxIterations);
     const relay = new Relay(createExecutor(mode, config, args), new RuleBasedReviewer());
     const runHandle = await new RunStore(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory)).createRun(handoff);
     const result = await relay.run(handoff, {
-      maxIterations: config.relay.maxIterations,
+      maxIterations: limits.maxIterations,
       approvedGateIds: approvals,
       runHandle,
     });
-    print(result);
+    print({ ...result, orchestration: limits.contract, executionBudgetSource: limits.source, maxIterationsBudget: limits.maxIterations });
     if (!["COMPLETED", "SIMULATED_COMPLETED"].includes(result.status)) process.exitCode = 4;
     return;
   }

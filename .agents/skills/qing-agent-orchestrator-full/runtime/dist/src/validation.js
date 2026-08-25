@@ -14,6 +14,7 @@ const operations = new Set([
     "delete",
     "execute_tests",
     "install_dependency",
+    "network_read",
     "network_access",
     "use_secret",
     "external_message",
@@ -21,6 +22,9 @@ const operations = new Set([
     "git_push",
     "production_deploy",
     "database_migration",
+    "global_write",
+    "purchase",
+    "scope_expansion",
 ]);
 const runPhases = new Set([
     "created",
@@ -204,6 +208,34 @@ export function validateHandoff(value) {
         errors.push("testPlan must be an array of non-empty strings");
     if (!Number.isInteger(value.maxIterations) || Number(value.maxIterations) < 1 || Number(value.maxIterations) > 5) {
         errors.push("maxIterations must be an integer from 1 to 5");
+    }
+    if (value.orchestration !== undefined) {
+        if (!isRecord(value.orchestration)) {
+            errors.push("orchestration must be an object");
+        }
+        else {
+            const contract = value.orchestration;
+            for (const key of Object.keys(contract)) {
+                if (!["tier", "childAgentBudget", "independentReviewer", "maxRevisions"].includes(key))
+                    errors.push("orchestration has unknown field: " + key);
+            }
+            if (!["direct", "lite", "full"].includes(String(contract.tier)))
+                errors.push("orchestration.tier is invalid");
+            if (!Number.isInteger(contract.childAgentBudget) || Number(contract.childAgentBudget) < 0 || Number(contract.childAgentBudget) > 8)
+                errors.push("orchestration.childAgentBudget must be an integer from 0 to 8");
+            if (typeof contract.independentReviewer !== "boolean")
+                errors.push("orchestration.independentReviewer must be a boolean");
+            if (!Number.isInteger(contract.maxRevisions) || Number(contract.maxRevisions) < 0 || Number(contract.maxRevisions) > 5)
+                errors.push("orchestration.maxRevisions must be an integer from 0 to 5");
+            if (contract.tier === "direct" && (contract.childAgentBudget !== 0 || contract.independentReviewer !== false || contract.maxRevisions !== 0))
+                errors.push("direct orchestration requires 0 children, no independent Reviewer, and 0 revisions");
+            if (contract.tier === "lite" && (contract.childAgentBudget !== 1 || contract.independentReviewer !== false || contract.maxRevisions !== 1))
+                errors.push("lite orchestration requires 1 child, no independent Reviewer, and 1 revision");
+            if (contract.tier === "full" && (!(typeof contract.childAgentBudget === "number" && contract.childAgentBudget >= 1) || contract.independentReviewer !== true || !(typeof contract.maxRevisions === "number" && contract.maxRevisions >= 1)))
+                errors.push("full orchestration requires at least 1 child, an independent Reviewer, and at least 1 revision");
+            if (Number.isInteger(value.maxIterations) && Number.isInteger(contract.maxRevisions) && Number(value.maxIterations) > Number(contract.maxRevisions) + 1)
+                errors.push("maxIterations exceeds orchestration.maxRevisions + 1");
+        }
     }
     return errors.length === 0
         ? { ok: true, errors, value: value }

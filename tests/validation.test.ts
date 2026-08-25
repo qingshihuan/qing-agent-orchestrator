@@ -25,6 +25,24 @@ test("example Handoff is valid", async () => {
   assert.equal(result.value?.id, "game-visual-analyzer-001");
 });
 
+test("Handoff orchestration contracts are backward compatible and fail closed on widened budgets", async () => {
+  const legacy = (await readExample()) as Record<string, unknown>;
+  assert.equal(validateHandoff(legacy).ok, true);
+  const full = { ...legacy, maxIterations: 3, orchestration: { tier: "full", childAgentBudget: 3, independentReviewer: true, maxRevisions: 2 } };
+  assert.equal(validateHandoff(full).ok, true);
+  for (const orchestration of [
+    { tier: "direct", childAgentBudget: 1, independentReviewer: false, maxRevisions: 0 },
+    { tier: "lite", childAgentBudget: 1, independentReviewer: true, maxRevisions: 1 },
+    { tier: "full", childAgentBudget: 0, independentReviewer: true, maxRevisions: 2 },
+  ]) {
+    assert.equal(validateHandoff({ ...legacy, maxIterations: 1, orchestration }).ok, false, JSON.stringify(orchestration));
+  }
+  assert.match(validateHandoff({ ...full, maxIterations: 4 }).errors.join("\n"), /maxIterations exceeds orchestration\.maxRevisions \+ 1/);
+  const schema = JSON.parse(await readFile("schemas/handoff.schema.json", "utf8")) as any;
+  assert.equal(schema.properties.orchestration.$ref, "#/$defs/orchestrationContract");
+  assert.equal(schema.required.includes("orchestration"), false);
+});
+
 test("standard edition is standalone and bundles every declared schema contract", async () => {
   const standardRoot = ".agents/skills/qing-agent-orchestrator";
   assert.deepEqual(await listRelativeFiles(standardRoot), [
@@ -45,6 +63,7 @@ test("standard edition is standalone and bundles every declared schema contract"
   assert.equal(standardHandoff.$id, "https://qing.local/schemas/desktop/handoff.schema.json");
   assert.equal(standardReview.$id, "https://qing.local/schemas/desktop/review.schema.json");
   assert.deepEqual(standardHandoff.properties.acceptanceCriteria.items.properties.verificationOwner.enum, ["parent", "internal-child", "hybrid"]);
+  assert.equal(standardHandoff.properties.orchestration.$ref, "#/$defs/orchestrationContract");
   assert.doesNotMatch(standardHandoffText, /relayVerification|process\.started|process\.exited|process\.heartbeat|sandbox\.preflight|"pid"|"exitCode"|"elapsedMs"|"effectiveSandbox"/i);
 
   const markdown = await Promise.all((await listRelativeFiles(standardRoot))
@@ -86,12 +105,17 @@ test("model route schema requires completion-first fallback plan and audit evide
   assert.equal(schema.required.includes("responseOwner"), false);
   assert.equal(schema.properties.responseOwner, undefined);
   assert.ok(schema.properties.execution.required.includes("executionOwner"));
-  assert.equal(schema.allOf[0].if.properties.route.const, "chat");
+  assert.equal(schema.required.includes("orchestration"), true);
+  assert.deepEqual(schema.$defs.orchestration.properties.tier.enum, ["direct", "lite", "full"]);
+  assert.equal(schema.allOf[0].if.properties.orchestration.properties.tier.const, "direct");
   assert.equal(schema.allOf[0].then.properties.executionOwner.const, "ChatGPT");
   assert.equal(schema.allOf[0].then.properties.execution.properties.executionOwner.const, "ChatGPT");
-  assert.deepEqual(schema.allOf[1].if.properties.route.enum, ["codex", "hybrid"]);
+  assert.deepEqual(schema.allOf[1].if.properties.orchestration.properties.tier.enum, ["lite", "full"]);
   assert.equal(schema.allOf[1].then.properties.executionOwner.const, "Codex");
   assert.equal(schema.allOf[1].then.properties.execution.properties.executionOwner.const, "Codex");
+  assert.equal(schema.allOf[2].then.properties.orchestration.properties.childAgentBudget.const, 1);
+  assert.equal(schema.allOf[2].then.properties.orchestration.properties.independentReviewer.const, false);
+  assert.equal(schema.allOf[3].then.properties.orchestration.properties.independentReviewer.const, true);
   const selection = schema.properties.modelSelection.anyOf.find((entry: any) => entry.type === "object");
   for (const field of ["executionOwner", "fallbackPlan", "fallbackAudit"]) assert.ok(selection.required.includes(field), field);
   const audit = schema.$defs.fallbackAudit;

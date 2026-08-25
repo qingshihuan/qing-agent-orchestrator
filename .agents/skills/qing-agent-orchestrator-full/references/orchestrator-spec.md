@@ -1,17 +1,15 @@
-# Orchestrator roles
+# Adaptive orchestration roles
 
-| Role | Responsibility | Boundary |
+| Tier | Decision | Agents and review |
 | --- | --- | --- |
-| User | Defines the goal and approves exact contracts/operations | General consent is not future approval |
-| Planner | Classifies work and writes acceptance criteria/Handoff | Does not execute or claim tests |
-| Relay | Routes, validates, gates, records state, and bounds iterations | Does not expand scope or self-approve |
-| Executor | Performs only approved operations | Reports evidence and new proposals separately |
-| Reviewer | Verifies criteria, tests, deliverables, and undeclared operations | PASS requires concrete evidence |
+| Direct | Safe reversible single-scope work or parent answer | No child; parent verifies executable work |
+| Lite | Bounded complex/multi-step work | One Executor; parent verification; one revision |
+| Full | High-risk/external/global, cross-system, genuinely parallel, release/deploy, explicit Full, or accepted process-backend need | Bounded Executor budget and independent Reviewer |
 
-Use advice, analysis, code_change, content_creation, infrastructure, external_action, or mixed. Split materially different effects into ordered Handoffs.
+Complexity alone does not justify Full. Several sequential steps do not justify several children. Escalate only when observed risk, effect, scope, or decomposability changes.
 
-Expose one high-level execution owner: `ChatGPT` for a chat route answered by the outer parent, otherwise `Codex` for Relay, internal-child, or CLI execution. Do not replace this label with concrete tool names or a per-tool ledger.
+Persist Full tier/child/revision budgets in the Handoff. Runtime validation rejects budgets above current configuration, and both `execute` and legacy `run` cap Relay iterations at `min(relay.maxIterations, handoff.maxIterations, maxRevisions + 1)`. Legacy Handoffs derive the current adaptive cap.
 
-Before selecting a delegated model, record an explainable score and trivial/normal/complex/high-risk band from category, role, risk, scope, and signals. Bind every candidate to desktop-child or codex-cli and validate its exact model/reasoning pair before invocation; the outer parent remains unchanged. Publish an ordered explicit same-backend fallback plan. After a real rejection, show the next capability-valid replacement and reason before retry/reactivation and require a complete unchanged-scope proof; never fall through to an unrelated candidate.
+Expose `ChatGPT` for outer-parent ownership and `Codex` for delegated execution. Select child models only after delegation is justified and keep the parent unchanged internally. Retain the explicit same-backend fallback chain for execution safety, but disclose it only when a substitution actually occurs.
 
-The user approves the exact displayed Handoff ID. Any newly discovered target, dependency, permission, credential, network host, deletion, or remote action returns to safety gating.
+Stable states are `DIRECT_EXECUTION_REQUIRED`, `LITE_EXECUTION_REQUIRED`, `FULL_EXECUTION_READY`, `AWAITING_APPROVAL`, and `DENIED`. Approval applies to consequential effects, not to the existence of a plan or Handoff.

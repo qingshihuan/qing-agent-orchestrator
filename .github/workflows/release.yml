@@ -3,14 +3,8 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - package.json
-      - package-lock.json
-      - CHANGELOG.md
-      - "docs/release-notes-v*.md"
-      - .github/workflows/release.yml
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
 
 permissions:
@@ -53,6 +47,9 @@ jobs:
           }
           if ([string]$runtime.version -ne $version) {
             throw "The packaged full runtime version is not synchronized with package.json version $version."
+          }
+          if ($env:GITHUB_EVENT_NAME -eq "push" -and $env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Pushed tag $env:GITHUB_REF_NAME does not match package version v$version."
           }
           $notes = "docs/release-notes-v$version.md"
           if (-not (Test-Path -LiteralPath $notes -PathType Leaf)) {
@@ -113,10 +110,22 @@ jobs:
         shell: pwsh
         run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/release-${{ github.run_id }}-${{ github.run_attempt }}"
 
-      - name: Verify committed archives match the release build
+      - name: Verify committed archives exactly match the release build
         if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
         shell: pwsh
-        run: ./scripts/compare-skill-archives.ps1 -CommittedRoot "${{ runner.temp }}/committed-artifacts" -GeneratedRoot artifacts -ScratchRoot "${{ runner.temp }}/qing-release-compare-${{ github.run_id }}-${{ github.run_attempt }}"
+        run: |
+          ./scripts/compare-skill-archives.ps1 -CommittedRoot "${{ runner.temp }}/committed-artifacts" -GeneratedRoot artifacts -ScratchRoot "${{ runner.temp }}/qing-release-compare-${{ github.run_id }}-${{ github.run_attempt }}"
+          foreach ($name in @(
+            "qing-agent-orchestrator-standard.zip",
+            "qing-agent-orchestrator-full.zip",
+            "SHA256SUMS.txt"
+          )) {
+            $committed = (Get-FileHash -LiteralPath "${{ runner.temp }}/committed-artifacts/$name" -Algorithm SHA256).Hash
+            $generated = (Get-FileHash -LiteralPath "artifacts/$name" -Algorithm SHA256).Hash
+            if ($committed -ne $generated) {
+              throw "Deterministic release artifact mismatch for $name."
+            }
+          }
 
       - name: Verify generated runtime has no semantic drift
         if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
@@ -176,4 +185,5 @@ jobs:
       - name: Report existing published release
         if: steps.existing.outputs.exists == 'true' && steps.existing.outputs.draft != 'true'
         shell: pwsh
-        run: Write-Host "Release already exists and is published: ${{ steps.existing.outputs.url }}"
+        run: |
+          Write-Host "Release already exists and is published: ${{ steps.existing.outputs.url }}"

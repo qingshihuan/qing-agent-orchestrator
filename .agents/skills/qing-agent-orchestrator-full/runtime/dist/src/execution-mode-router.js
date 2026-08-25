@@ -43,8 +43,8 @@ function declinedLimitations(reasonCodes) {
     };
     return reasonCodes.flatMap((code) => messages[code] ? [messages[code]] : []);
 }
-export function routeExecutionMode(text, edition, taskRoute) {
-    const delegationTarget = taskRoute === "chat"
+export function routeExecutionMode(text, edition, taskRoute, orchestrationTier) {
+    const delegationTarget = taskRoute === "chat" || orchestrationTier === "direct"
         ? "outer-session"
         : visibleTask.test(text)
             ? "visible-task"
@@ -96,7 +96,7 @@ export async function respondToCliRecommendation(decision, response, inspector) 
     const dependencyStatus = await inspector.inspect();
     return {
         ...decision,
-        mode: dependencyStatus === "ready" ? "cli-awaiting-handoff-approval" : "cli-setup-required",
+        mode: dependencyStatus === "ready" ? "cli-full-planning" : "cli-setup-required",
         recommendation: { ...decision.recommendation, response: "accepted", dependencyStatus },
         suppressCliPromptForTask: true,
     };

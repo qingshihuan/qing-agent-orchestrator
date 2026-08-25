@@ -110,7 +110,7 @@ test("declining discloses every backend-exclusive limitation but keeps desktop-c
 });
 
 test("accepting checks the conditional dependency once but still cannot start a task", async () => {
-  for (const [status, mode] of [["missing", "cli-setup-required"], ["authentication-required", "cli-setup-required"], ["ready", "cli-awaiting-handoff-approval"]] as const) {
+  for (const [status, mode] of [["missing", "cli-setup-required"], ["authentication-required", "cli-setup-required"], ["ready", "cli-full-planning"]] as const) {
     const pending = routeExecutionMode("使用 CLI 完成任务", "full", "codex");
     let calls = 0;
     const accepted = await respondToCliRecommendation(pending, "accept", { inspect: async () => { calls += 1; return status; } });

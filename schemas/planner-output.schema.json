@@ -127,7 +127,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["read", "write", "delete", "execute_tests", "install_dependency", "network_access", "use_secret", "external_message", "git_commit", "git_push", "production_deploy", "database_migration"]
+          "enum": ["read", "write", "delete", "execute_tests", "install_dependency", "network_read", "network_access", "use_secret", "external_message", "git_commit", "git_push", "production_deploy", "database_migration", "global_write", "purchase", "scope_expansion"]
         },
         "target": { "type": "string", "minLength": 1 },
         "reason": { "type": "string", "minLength": 1 },

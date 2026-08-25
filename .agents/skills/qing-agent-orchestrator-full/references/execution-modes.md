@@ -1,38 +1,16 @@
 # Execution modes
 
-Task routing and process-backend routing are independent. Desktop is always the default.
+Tier selection happens before backend selection. Direct and ordinary Lite work stay in the desktop app without probing the process backend.
 
-| Condition | Standard edition | Full edition |
-| --- | --- | --- |
-| Advice or analysis | Parent desktop task | Parent desktop task |
-| Normal code/content work | Internal desktop child | Internal desktop child |
-| Complex or long interactive work | Internal desktop child | Internal desktop child |
-| User requests a visible task | Separate visible desktop task | Separate visible desktop task |
-| Explicit CLI request | Continue desktop | Recommend CLI |
-| Script or CI | Continue desktop | Recommend CLI |
-| Scheduled, batch, or unattended run | Continue desktop | Recommend CLI |
-| Must continue after app closes | Continue desktop and disclose limitation | Recommend CLI |
-| Machine-readable status/logs/cancel | Continue desktop and disclose limitation | Recommend CLI |
-| CLI-only configured model/environment | Continue with desktop candidates | Recommend CLI |
-| Process isolation or task queue | Continue desktop | Recommend CLI |
+The `start`/`prepare` command follows the same boundary: Direct returns immediately without model allocation or Planner activity; Lite returns a desktop single-Executor contract; only Full may invoke a local or connected Handoff Planner. `orchestration.mode=full` is the explicit force-Full configuration.
 
-## Recommendation state machine
+Recommend the optional backend only for an explicit CLI request, script/CI integration, scheduled/batch/unattended execution, app-close persistence, machine-readable status/logs/cancel, a CLI-only model/environment, or process isolation/queue needs. Coding complexity or duration alone is insufficient.
 
-desktop-native → cli-recommended → user choice
+`desktop-native → cli-recommended → user choice`
 
-- Decline → desktop-fallback-selected → continue desktop work; suppress another prompt for the task.
-- Accept → dependency check only.
-  - Missing or signed out → cli-setup-required; guide setup and obtain approval for changes.
-  - Ready → cli-awaiting-handoff-approval; create and display a fresh Handoff.
+- Decline → desktop fallback; do not repeat the prompt for this task.
+- Accept → read-only dependency/authentication check.
+- Missing/setup needed → setup-required; installation/configuration remains effect-gated.
+- Ready → Full Handoff and safety evaluation; ALLOW becomes `FULL_EXECUTION_READY`, gated effects become `AWAITING_APPROVAL`.
 
-No route decision or recommendation starts a process. Coding, complexity, and duration alone are negative cases.
-
-Stable reason codes:
-
-- explicit-cli-request
-- script-or-ci
-- scheduled-batch-unattended
-- app-close-persistence
-- machine-readable-control-plane
-- cli-only-model-or-environment
-- process-isolation-or-queue
+No state transition starts task execution.

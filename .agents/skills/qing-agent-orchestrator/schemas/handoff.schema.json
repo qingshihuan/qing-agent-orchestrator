@@ -94,6 +94,7 @@
       "items": { "type": "string", "minLength": 1 }
     },
     "maxIterations": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "orchestration": { "$ref": "#/$defs/orchestrationContract" },
     "metadata": {
       "type": "object",
       "additionalProperties": false,
@@ -104,6 +105,31 @@
     }
   },
   "$defs": {
+    "orchestrationContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tier", "childAgentBudget", "independentReviewer", "maxRevisions"],
+      "properties": {
+        "tier": { "enum": ["direct", "lite", "full"] },
+        "childAgentBudget": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "independentReviewer": { "type": "boolean" },
+        "maxRevisions": { "type": "integer", "minimum": 0, "maximum": 5 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "tier": { "const": "direct" } }, "required": ["tier"] },
+          "then": { "properties": { "childAgentBudget": { "const": 0 }, "independentReviewer": { "const": false }, "maxRevisions": { "const": 0 } } }
+        },
+        {
+          "if": { "properties": { "tier": { "const": "lite" } }, "required": ["tier"] },
+          "then": { "properties": { "childAgentBudget": { "const": 1 }, "independentReviewer": { "const": false }, "maxRevisions": { "const": 1 } } }
+        },
+        {
+          "if": { "properties": { "tier": { "const": "full" } }, "required": ["tier"] },
+          "then": { "properties": { "childAgentBudget": { "minimum": 1 }, "independentReviewer": { "const": true }, "maxRevisions": { "minimum": 1 } } }
+        }
+      ]
+    },
     "operation": {
       "type": "object",
       "additionalProperties": false,
@@ -116,13 +142,17 @@
             "delete",
             "execute_tests",
             "install_dependency",
+            "network_read",
             "network_access",
             "use_secret",
             "external_message",
             "git_commit",
             "git_push",
             "production_deploy",
-            "database_migration"
+            "database_migration",
+            "global_write",
+            "purchase",
+            "scope_expansion"
           ]
         },
         "target": { "type": "string", "minLength": 1 },

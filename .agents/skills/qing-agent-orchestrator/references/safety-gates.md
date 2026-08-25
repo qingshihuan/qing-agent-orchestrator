@@ -1,50 +1,11 @@
-# Safety and human gates
+# Effect-based safety gates
 
-Evaluate the exact operation, target, reason, and risk before execution. Approval IDs are scoped to a single Handoff operation and must not become blanket future permission.
+The user's request authorizes safe work inside its stated scope. Do not ask for approval merely because a task has a plan, Handoff, child, model, local edit, or local test.
 
-Before operation gates, require approval of the complete Handoff by its exact ID. This approval is valid only after the user has seen the objective, workspace, allowed paths, deliverables, test plan, and requested operations. It does not approve any `REQUIRE_APPROVAL` operation automatically.
+Allow declared project reads, reversible scoped writes, nondestructive local builds/tests, project-local dependencies, and `network_read` only when the runtime recognizes an exact reviewed documentation host. Arbitrary HTTPS syntax cannot prove a public destination: unlisted hosts, every IP literal, local/private names, URL userinfo, sensitive query names, fragments, authenticated/ambiguous/state-changing access, and legacy `network_access` require an effect gate. The runtime allowlist is `developers.openai.com`, `docs.github.com`, `github.com`, `help.openai.com`, `learn.chatgpt.com`, `openai.com`, `platform.openai.com`, `raw.githubusercontent.com`, and `www.openai.com`.
 
-## Allow by default
+Require one concise approval bundle for the exact consequential effects that are actually needed: deletion, global/system writes or installation, secrets/private data, authenticated network access, external messages or publication, Git push, production deployment, purchase/cost, destructive migration, material scope expansion, or any high/critical operation. Model substitution alone is not an effect gate when the internally validated same-backend chain and complete unchanged-scope proof remain valid.
 
-Allow only when declared and confined to `workspace.allowedPaths`:
+Deny unresolved broad deletion, drive/user/workspace-root deletion, paths outside `allowedPaths`, parent traversal, embedded secrets, gate/audit bypass, or an unresolved target. A denial must be corrected rather than approved.
 
-- reading scoped project files;
-- writing scoped project files;
-- running local tests and builds;
-- installing project-local dependencies;
-- creating a local commit when explicitly requested.
-
-## Require human approval
-
-Require approval for:
-
-- deleting files or data;
-- any push, especially protected branches such as `main`;
-- production or public deployment;
-- destructive or irreversible database migration;
-- accessing a named secret or credential;
-- network access to an external service;
-- sending messages, publishing content, purchasing, or other external side effects;
-- global/system software installation or writes outside the workspace;
-- any operation marked `high` or `critical` risk.
-
-On Windows, prefer D drive for system/global software installations when feasible. Project-local dependencies remain part of the chosen workspace.
-
-## Deny without override
-
-Deny and require a corrected Handoff for:
-
-- recursive deletion of a drive root, home directory, workspace root, or unresolved broad path;
-- file reads/writes/deletes outside `allowedPaths`;
-- absolute file-operation targets or targets containing parent traversal, even when `allowedPaths` uses a wildcard;
-- embedding secret values in prompts, logs, Handoffs, or review artifacts;
-- bypassing, disabling, or falsifying the gate/reviewer/audit trail;
-- an operation whose target cannot be resolved precisely.
-
-Approval cannot convert `DENY` to `ALLOW`; the operation itself must be narrowed or removed.
-
-## Re-gating
-
-After execution, compare actual/proposed operations with the Handoff. Stop and re-gate any new operation before it occurs. Do not accept an executor's self-approval.
-
-Model identity is not an operation effect. A capability-valid substitution needs no new gate only when it stays on the explicit same-backend chain and a complete explicit proof records requested operations, `allowedPaths`, sandbox, permissions, and effects as unchanged booleans. Missing/incomplete proof, a backend change, or any changed operation, path, sandbox, permission, or effect requires a fresh gate before retrying.
+If a gated effect becomes unnecessary, skip it and continue other safe work. If a selected model is rejected, use only the next internally validated capability-valid same-backend pair. Do not preannounce it; after the replacement is actually used, report the rejected pair, reason, and actual replacement. Re-gate only when backend, operation, path, sandbox, permission, or effect changes.

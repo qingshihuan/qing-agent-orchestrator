@@ -2,6 +2,8 @@
 
 CLI 是完整版的条件能力，不是完整版的启动依赖。标准版没有启动器或 runtime。
 
+`start`/`prepare` 先经过自适应编排：Direct 直接返回父任务状态且不分配模型、不探测 CLI、不调用 Planner；Lite 只返回桌面单 Executor 合同；只有 Full 才能进入 local 或 connected Handoff 规划。配置 `orchestration.mode=full` 是显式强制 Full 的兼容入口。
+
 ## 何时建议
 
 仅允许稳定 reason code：
@@ -30,9 +32,10 @@ CLI 是完整版的条件能力，不是完整版的启动依赖。标准版没�
 4. CLI 就绪后创建新的任务 Handoff。
 5. 真实执行要求：
    - executor.codexExec.enabled=true；
-   - --approve-handoff exact-id；
    - --allow-real-execution；
    - 所有 REQUIRE_APPROVAL gate 已批准。
+
+安全、已声明的 Handoff 不需要单独批准。`--approve-handoff` 仅作为旧调用兼容字段保留；若提供则必须匹配 exact ID。删除、全局/系统写入、密钥、私有/认证访问、外部写入、push、部署、购买、破坏性迁移或重大范围扩展仍需要对应 gate。
 
 ## 模型和推理强度
 
@@ -57,6 +60,8 @@ CLI 只能使用本机已配置并通过模型目录校验与最小健康检查�
 
 真实进程开始后 RunStore 记录 started、heartbeat、exited、phase、iteration、pid 和 elapsedMs。status、logs 和 cancel 从持久化状态工作。取消终态不得被后续退出事件覆盖。
 
+新 Handoff 保存 tier/child/revision 预算。`execute` 和旧 `run` 共用同一运行时上限解析：合同不得超过当前配置，实际迭代数取 relay 配置、Handoff `maxIterations`、`maxRevisions + 1` 的最小值；没有预算字段的旧 Handoff 从当前自适应路由派生，以保持可读取兼容但不保留无界循环。
+
 Executor 返回后，声明的 testPlan 由 Relay 父进程独立执行并绑定 runId、handoffId、iteration 与命令。Git 前后快照检查工作区内未上报变化；审计不确定时进入人工复核。
 
 ## Windows runtime
@@ -72,7 +77,7 @@ Executor 返回后，声明的 testPlan 由 Relay 父进程独立执行并绑定
 - modelRouting.mode=inherit；
 - approvedGateIds=[]。
 
-它不包含 codex.exe。用户接受建议、完成依赖检查并批准新的 Handoff 前，包内能力不会执行真实任务。
+它不包含 codex.exe。用户接受建议、完成依赖检查并显式提供 `--allow-real-execution` 前，包内能力不会执行真实任务；高风险效果还必须通过对应 gate。
 
 ## 未实现或未在本轮证明
 

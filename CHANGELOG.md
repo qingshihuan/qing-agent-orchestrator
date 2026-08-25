@@ -1,6 +1,35 @@
 # Changelog
 
-本项目采用语义化版本编号。当前稳定版本为 `v0.5.0`；既有版本的历史记录与标签语义保持不变。
+本项目采用语义化版本编号。当前稳定版本为 `v0.6.0`；既有版本的历史记录与标签语义保持不变。
+
+## 0.6.0 - 2026-08-25
+
+### Added
+
+- `Direct | Lite | Full` 确定性编排决策和可配置的 child/reviewer/revision 预算。
+- `network_read` 公开 HTTPS 只读语义，以及 `global_write`、`purchase`、`scope_expansion` 明确效果类型。
+- `DIRECT_EXECUTION_REQUIRED`、`LITE_EXECUTION_REQUIRED`、`FULL_EXECUTION_READY`、`AWAITING_APPROVAL` 和 `DENIED` 状态。
+
+### Changed
+
+- 普通安全的项目内读写、构建和测试由用户目标直接授权，不再等待 Handoff 批准。
+- Lite 最多一个 Executor、父任务验证和一次修订；只有高风险、跨系统、真正并行、发布/部署/全局或显式 Full 才使用独立 Reviewer。
+- 只有 child budget 大于零时才进行模型和推理强度选择；父任务模型保持不变，同后端 completion-first 回退继续披露。
+- 子任务创建前只展示实际选择的归属、角色、任务、模型和推理强度；不重复展示父任务不变，也不预告备用模型。只有实际发生替换后才披露回退原因和真实替代模型。
+- 安全 CLI Handoff 可直接进入 ready；`--approve-handoff` 仅保留兼容校验，高风险效果继续使用精确 gate ID。
+- `start`/`prepare` 先执行自适应路由；Direct/Lite 不再构造或调用 Handoff Planner，只有 Full 可进入 connected/local planning。
+- 新 Handoff 固化 tier/child/revision 合同；`execute` 与旧 `run` 共用合同、配置、Handoff 的最小迭代上限。
+- 技能安装包按序写入条目并固定 ZIP 时间戳和属性，使本地与 CI 对相同内容生成一致的 SHA-256。
+
+### Safety
+
+- 删除、全局/系统修改、密钥/私有或认证访问、外部写入、push、部署、购买、破坏性迁移和重大范围扩展仍需明确批准。
+- 旧 `network_access` 保持 gated；`network_read` 仅自动放行审查清单内的精确文档主机。任意其他 HTTPS、IP literal、本地/私有名称、userinfo、敏感 query 或 fragment 都失败关闭到人工 gate。
+
+### Evidence boundary
+
+- 自动测试验证路由预算、Direct 无模型分配、Lite 单 Executor、Full Reviewer、效果 gate、升级和旧配置兼容。
+- 本版本不声明固定 token 节省比例；源码测试和打包验证也不等于新的 connected CLI E2E。
 
 ## 0.5.0 - 2026-08-24
 

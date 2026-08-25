@@ -25,6 +25,9 @@ const humanGated = new Set([
   "git_push",
   "production_deploy",
   "database_migration",
+  "global_write",
+  "purchase",
+  "scope_expansion",
 ]);
 
 function gateId(handoffId: string, index: number, operation: OperationRequest): string {
@@ -60,6 +63,52 @@ function matchesAllowedPath(target: string, allowedPaths: string[]): boolean {
   });
 }
 
+/**
+ * Synchronous gating cannot prove DNS resolution or ownership for an arbitrary
+ * hostname. Auto-allow only this reviewed, exact-host documentation set; every
+ * other valid HTTPS URL remains available through an operation approval.
+ */
+export const autoAllowedNetworkReadHosts = new Set([
+  "developers.openai.com",
+  "docs.github.com",
+  "github.com",
+  "help.openai.com",
+  "learn.chatgpt.com",
+  "openai.com",
+  "platform.openai.com",
+  "raw.githubusercontent.com",
+  "www.openai.com",
+]);
+
+const privateNameSuffixes = [".corp", ".home", ".internal", ".intranet", ".lan", ".local", ".localhost", ".private"];
+const sensitiveQueryNames = ["accesskey", "apikey", "auth", "authorization", "callback", "continue", "cookie", "credential", "destination", "key", "next", "password", "passwd", "redirect", "return", "secret", "session", "signature", "token", "url"];
+
+function isIpLiteral(host: string): boolean {
+  const unwrapped = host.replace(/^\[|\]$/g, "");
+  if (unwrapped.includes(":")) return true;
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(unwrapped);
+}
+
+function hasSensitiveQuery(url: URL): boolean {
+  for (const name of url.searchParams.keys()) {
+    const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (sensitiveQueryNames.some((sensitive) => normalized.includes(sensitive))) return true;
+  }
+  return false;
+}
+
+function isProvablyPublicRead(target: string): boolean {
+  try {
+    const url = new URL(target.trim());
+    if (url.protocol !== "https:" || (url.port && url.port !== "443") || url.username || url.password || url.hash || hasSensitiveQuery(url)) return false;
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (!host || host === "localhost" || !host.includes(".") || privateNameSuffixes.some((suffix) => host.endsWith(suffix)) || isIpLiteral(host)) return false;
+    return autoAllowedNetworkReadHosts.has(host);
+  } catch {
+    return false;
+  }
+}
+
 function decideOperation(operation: OperationRequest, allowedPaths: string[]): { decision: GateDecisionKind; reason: string } {
   if (["read", "write", "delete"].includes(operation.type) && escapesWorkspace(operation.target)) {
     return { decision: "DENY", reason: "文件操作目标必须是工作区相对路径，禁止绝对路径和父目录穿越" };
@@ -77,6 +126,10 @@ function decideOperation(operation: OperationRequest, allowedPaths: string[]): {
     return { decision: "REQUIRE_APPROVAL", reason: "全局或系统级软件安装必须人工确认；Windows 优先选择 D 盘" };
   }
 
+  if (operation.type === "network_read" && !isProvablyPublicRead(operation.target)) {
+    return { decision: "REQUIRE_APPROVAL", reason: "同步安全门只自动放行经过审查的精确文档主机；其他 HTTPS、IP/内网、认证信息、敏感查询或片段必须人工确认" };
+  }
+
   if (humanGated.has(operation.type)) {
     return { decision: "REQUIRE_APPROVAL", reason: "该操作会删除数据、访问外部系统、使用密钥或改变远端/生产状态" };
   }
@@ -85,7 +138,7 @@ function decideOperation(operation: OperationRequest, allowedPaths: string[]): {
     return { decision: "REQUIRE_APPROVAL", reason: "Handoff 将该操作标记为高风险或关键风险" };
   }
 
-  return { decision: "ALLOW", reason: "已声明的低风险工作区内操作" };
+  return { decision: "ALLOW", reason: operation.type === "network_read" ? "精确审查主机上的只读 HTTPS；任何重定向、目标或效果变化必须重新进入 gate" : "已声明的低风险工作区内操作" };
 }
 
 export function evaluateSafetyGate(handoff: Handoff, approvedGateIds: string[] = []): GateReport {

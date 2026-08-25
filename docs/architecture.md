@@ -2,9 +2,9 @@
 
 ## 三个独立路由
 
-1. Task Router：判断 chat、codex 或 hybrid，决定父任务直接回答还是需要结构化执行合同。
-2. Execution Mode Router：判断 desktop-native、cli-recommended、cli-setup-required、cli-awaiting-handoff-approval 或 desktop-fallback。
-3. Model Router：先由 Task Analyzer 按 category、role、risk、scope、signals 计算分数与四档 band，再只为委派角色选择所选后端能力表允许的 model/profile/reasoning 组合，并发布 completion-first 显式有序回退计划。
+1. Task / Orchestration Router：判断 chat、codex 或 hybrid，再按风险、效果、scope、可分解性和显式请求选择 Direct、Lite 或 Full。
+2. Execution Mode Router：判断 desktop-native、cli-recommended、cli-setup-required、cli-full-planning 或 desktop-fallback。
+3. Model Router：只在编排层已经授予 child budget 后，按 delegated role 的 band 选择 model/profile/reasoning 组合并发布 completion-first 显式回退计划。Direct 不进入模型选择。
 
 写代码不会自动命中 CLI。父任务模型永不因子任务路由而切换。
 
@@ -20,21 +20,17 @@
 
     User goal
       → Task Router
-      → Execution Mode Router
-         → desktop parent/internal child
-         → optional recommendation → accept/decline
-      → Planner Handoff
-      → exact approval + operation gates
-      → Executor
-      → RunStore events/test/Git evidence
-      → RuleBased Reviewer
-      → PASS | REVISE | HUMAN_REVIEW
+      → Orchestration Router
+         → Direct: parent, 0 child
+         → Lite: 1 Executor → parent verification
+         → Full: Handoff → effect gates → Executor → independent Reviewer
+      → optional process recommendation → accept/decline
 
-内部子任务默认把结果返回父任务。用户明确要求或需要独立观察/隔离时才创建可见任务。
+Direct 默认把安全单一范围工作留在父任务。Lite/Full 子任务仍把结果返回父任务；只有明确要求或需要独立观察/隔离时才创建可见任务。
 
 桌面内部子任务调用合同是 `spawnAgent: { model, reasoning_effort }`，其中 router 字段 `reasoningEffort` 明确映射到 host 参数 `reasoning_effort`；显式 spawn 参数优先于两个 `agents.default_subagent_*` 默认值。可选进程后端合同是 `-m <model>` 加 `model_reasoning_effort`。两者都不会改变 outer parent。
 
-模型选择同时生成 `fallbackPlan` 与 `fallbackAudit`。计划只包含能力有效的显式同后端链；审计保存 `executionOwner: Codex`、planned/actual pair、原因、整条链、每次 unavailable/rejected/selected 尝试，以及带 `scopeProofComplete` 的 backend、operations、allowedPaths、sandbox、permissions、effects 布尔证明。桌面真实 spawn 拒绝后，父任务必须先展示下一 pair 和原因再重试/重新激活；真实 CLI 调用只有在错误明确点名当前所选 model ID 且描述其标识、account entitlement、metadata 或 availability 被拒绝时才有限回退，并保持 prompt、workspace、sandbox、permissions、output schema、timeout 和 output limit 不变。高风险任务仍可按同一规则替换，因为 gate 约束操作效果而不是模型名称；证明缺失/不完整、跨后端或范围变化必须重新 gate。
+模型选择同时生成内部 `fallbackPlan` 与 `fallbackAudit`。计划只包含能力有效的显式同后端链；审计保存 `executionOwner: Codex`、planned/actual pair、原因、整条链、每次 unavailable/rejected/selected 尝试，以及带 `scopeProofComplete` 的 backend、operations、allowedPaths、sandbox、permissions、effects 布尔证明。创建子任务前不展示备用模型，也不重复“父任务模型不变”；桌面真实 spawn 拒绝且替换 pair 实际使用后，父任务才在后续进度或最终结果中披露被拒绝 pair、原因和实际替换 pair。真实 CLI 调用只有在错误明确点名当前所选 model ID 且描述其标识、account entitlement、metadata 或 availability 被拒绝时才有限回退，并保持 prompt、workspace、sandbox、permissions、output schema、timeout 和 output limit 不变。高风险任务仍可按同一规则替换，因为 gate 约束操作效果而不是模型名称；证明缺失/不完整、跨后端或范围变化必须重新 gate。
 
 当前桌面 host capability snapshot：
 
@@ -51,12 +47,14 @@
 - 规划、执行和审查证据分离。
 - route/recommendation 不启动进程。
 - 拒绝 CLI 后继续桌面并禁止当前任务重复提示。
-- 接受建议只进入依赖检查，不等于安装或任务批准。
-- 精确 Handoff 审批与 operation gate 分离。
+- 接受建议只进入只读依赖检查，不等于安装或真实任务启动。
+- Handoff 本身不是审批点；仅 delete/global/system/secrets/private/authenticated network/external write/push/deploy/purchase/destructive migration/scope expansion 等效果进入 gate。
+- 同步 gate 不用 URL 语法猜测 DNS/主机是否公开。`network_read` 仅对 README 列出的精确审查主机自动允许，并拒绝免批 userinfo、敏感 query、fragment、IP literal 与本地/私有名称；其他 HTTPS 进入审批，旧 `network_access` 保持 gated 兼容语义。
+- 新 Handoff 固化 tier、childAgentBudget、independentReviewer 和 maxRevisions。`execute` 与旧 `run` 在启动 Relay 前校验该合同没有超过当前配置，并把迭代数限制为 relay 配置、Handoff `maxIterations` 和 `maxRevisions + 1` 的最小值；旧 Handoff 没有该字段时从当前自适应路由派生预算。
 - 同后端模型替换只有在完整显式 scope 证明确认 operations/allowedPaths/sandbox/permissions/effects 不变时复用 gate；缺失/不完整证明或任一变化都重新审批。
 - 显式 fallback 链耗尽后失败关闭，不隐式落到无关候选；认证和非模型进程/协议失败不进入回退链。
 - mock/dry-run、heartbeat、活跃进程都不是完成证据。
-- Reviewer 只基于当前 run/iteration 的受信任证据，并要求最终 fallback 披露。
+- Reviewer 只基于当前 run/iteration 的受信任证据；仅在实际发生模型替换时要求最终 fallback 披露。
 - 新目标、路径、依赖或权限返回闸门。
 - standard archive 不含 CLI 材料；full archive 不含 codex.exe。
 

@@ -217,7 +217,7 @@ export async function planLocally(
     requestedOperations.push({
       type: "write",
       target: "**/*",
-      reason: "Create or update only files required by the approved objective.",
+      reason: "Create or update only files required by the declared objective.",
       risk: "medium",
     });
   }
@@ -225,7 +225,7 @@ export async function planLocally(
     requestedOperations.push({
       type: "execute_tests",
       target: "project-local test and build commands",
-      reason: "Verify the approved implementation.",
+      reason: "Verify the declared implementation.",
       risk: "low",
     });
   }
@@ -233,7 +233,7 @@ export async function planLocally(
   const acceptanceCriteria: Handoff["acceptanceCriteria"] = [
     {
       id: "ac-1",
-      description: `The result satisfies this approved objective: ${task.trim()}`,
+      description: `The result satisfies this declared objective: ${task.trim()}`,
       verification: changesFiles
         ? "Review the changed artifacts against the exact objective and constraints."
         : "Review the response against project evidence and the exact objective.",

@@ -56,3 +56,83 @@ test("wildcard allowed paths never permit absolute paths or parent traversal", a
     assert.equal(evaluateSafetyGate(escaped).outcome, "DENY");
   }
 });
+
+test("only reviewed exact documentation hosts are auto-allowed for network_read", async () => {
+  const handoff = await exampleHandoff();
+  const withOperation = (type: "network_read" | "network_access", target: string): Handoff => ({
+    ...handoff,
+    id: `network-${type}-${target.length}`,
+    requestedOperations: [{ type, target, reason: "read documentation", risk: "low" }],
+  });
+  for (const target of [
+    "https://developers.openai.com/api/docs/guides/latest-model",
+    "https://docs.github.com/en/actions",
+    "https://learn.chatgpt.com/docs/codex/cli",
+  ]) {
+    assert.equal(evaluateSafetyGate(withOperation("network_read", target)).outcome, "ALLOW", target);
+  }
+  for (const target of [
+    "https://example.com/docs",
+    "https://developers.openai.com.evil.example/docs",
+    "https://developers.openai.com:8443/docs",
+    "https://user:password@developers.openai.com/docs",
+    "https://developers.openai.com/docs#access_token=secret",
+    "https://developers.openai.com/docs?redirect=https://127.0.0.1",
+    "private documentation",
+  ]) {
+    assert.equal(evaluateSafetyGate(withOperation("network_read", target)).outcome, "REQUIRE_APPROVAL", target);
+  }
+  assert.equal(evaluateSafetyGate(withOperation("network_access", "https://api.example.com/private")).outcome, "REQUIRE_APPROVAL");
+});
+
+test("network_read fails closed for credential query names and local, private, reserved, or special addresses", async () => {
+  const handoff = await exampleHandoff();
+  const withTarget = (target: string): Handoff => ({
+    ...handoff,
+    id: `network-negative-${target.length}`,
+    requestedOperations: [{ type: "network_read", target, reason: "negative boundary fixture", risk: "low" }],
+  });
+  const sensitiveNames = ["token", "authorization", "key", "api_key", "access_token", "signature", "secret", "password", "session", "cookie"];
+  for (const name of sensitiveNames) {
+    const target = `https://developers.openai.com/docs?${name}=fixture`;
+    assert.equal(evaluateSafetyGate(withTarget(target)).outcome, "REQUIRE_APPROVAL", target);
+  }
+  for (const target of [
+    "https://localhost/docs",
+    "https://service.local/docs",
+    "https://service.internal/docs",
+    "https://intranet/docs",
+    "https://0.0.0.1/docs",
+    "https://10.0.0.1/docs",
+    "https://100.64.0.1/docs",
+    "https://127.0.0.1/docs",
+    "https://169.254.1.1/docs",
+    "https://172.16.0.1/docs",
+    "https://192.168.1.1/docs",
+    "https://192.0.0.1/docs",
+    "https://192.0.2.1/docs",
+    "https://198.18.0.1/docs",
+    "https://198.51.100.1/docs",
+    "https://203.0.113.1/docs",
+    "https://224.0.0.1/docs",
+    "https://240.0.0.1/docs",
+    "https://255.255.255.255/docs",
+    "https://[::1]/docs",
+    "https://[fe80::1]/docs",
+    "https://[fc00::1]/docs",
+    "https://[fd00::1]/docs",
+    "https://[::ffff:127.0.0.1]/docs",
+    "https://[::ffff:192.168.1.1]/docs",
+    "https://[2001:db8::1]/docs",
+  ]) {
+    assert.equal(evaluateSafetyGate(withTarget(target)).outcome, "REQUIRE_APPROVAL", target);
+  }
+});
+
+test("global writes, purchases, and material scope expansion remain effect-gated", async () => {
+  const handoff = await exampleHandoff();
+  for (const type of ["global_write", "purchase", "scope_expansion"] as const) {
+    const report = evaluateSafetyGate({ ...handoff, id: `effect-${type}`, requestedOperations: [{ type, target: "declared target", reason: "consequential effect", risk: "medium" }] });
+    assert.equal(report.outcome, "REQUIRE_APPROVAL", type);
+  }
+});

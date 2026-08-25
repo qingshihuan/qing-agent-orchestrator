@@ -14,12 +14,15 @@ export type WindowsSandboxMode = "unelevated" | "elevated";
 export type TaskRoute = "chat" | "codex" | "hybrid";
 export type ExecutionOwner = "ChatGPT" | "Codex";
 export type OrchestratorEdition = "standard" | "full";
+export type OrchestrationTier = "direct" | "lite" | "full";
+export type OrchestrationMode = "adaptive" | "full";
+export type ReviewerMode = "risk-based";
 export type DelegationTarget = "outer-session" | "internal-child" | "visible-task";
 export type ExecutionMode =
   | "desktop-native"
   | "cli-recommended"
   | "cli-setup-required"
-  | "cli-awaiting-handoff-approval"
+  | "cli-full-planning"
   | "desktop-fallback";
 export type CliReasonCode =
   | "explicit-cli-request"
@@ -54,6 +57,34 @@ export interface ExecutionModeDecision {
   recommendation: CliRecommendation | null;
   suppressCliPromptForTask: boolean;
   limitations: string[];
+}
+
+export interface OrchestrationConfig {
+  mode: OrchestrationMode;
+  liteMaxChildren: 1;
+  fullMaxChildren: number;
+  liteMaxRevisions: 1;
+  fullMaxRevisions: number;
+  reviewerMode: ReviewerMode;
+}
+
+export interface OrchestrationDecision {
+  tier: OrchestrationTier;
+  childAgentBudget: number;
+  independentReviewer: boolean;
+  maxRevisions: number;
+  parentVerification: boolean;
+  modelSelectionRequired: boolean;
+  approvalPolicy: "effects-only";
+  decomposable: boolean;
+  reasons: string[];
+}
+
+export interface HandoffOrchestrationContract {
+  tier: OrchestrationTier;
+  childAgentBudget: number;
+  independentReviewer: boolean;
+  maxRevisions: number;
 }
 export type ModelRole = "planner" | "executor" | "reviewer";
 export type ModelBackend = "desktop-child" | "codex-cli";
@@ -202,13 +233,17 @@ export type OperationType =
   | "delete"
   | "execute_tests"
   | "install_dependency"
+  | "network_read"
   | "network_access"
   | "use_secret"
   | "external_message"
   | "git_commit"
   | "git_push"
   | "production_deploy"
-  | "database_migration";
+  | "database_migration"
+  | "global_write"
+  | "purchase"
+  | "scope_expansion";
 
 export interface OperationRequest {
   type: OperationType;
@@ -253,6 +288,7 @@ export interface Handoff {
   }>;
   testPlan: string[];
   maxIterations: number;
+  orchestration?: HandoffOrchestrationContract;
   metadata?: {
     createdAt?: string;
     source?: string;
@@ -507,6 +543,7 @@ export interface RelayConfig {
   runtime: {
     stateDirectory: string;
   };
+  orchestration: OrchestrationConfig;
   modelRouting: ModelRoutingConfig;
   security: { approvedGateIds: string[] };
 }

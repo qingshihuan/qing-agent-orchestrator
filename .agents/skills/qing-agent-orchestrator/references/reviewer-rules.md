@@ -1,51 +1,15 @@
-# Reviewer rules
+# Tiered verification rules
 
-## Inputs
+## Direct
 
-Review only these materials:
+Do not create an independent Reviewer. For executable work, the parent checks the most relevant artifact/diff and runs proportionate nondestructive verification. Advice needs no synthetic review phase.
 
-- the validated Handoff;
-- executor status and summary;
-- artifact list or diff evidence;
-- criterion-by-criterion evidence;
-- required test commands and results;
-- model fallback plan/audit evidence, when model routing was explicit;
-- newly proposed operations.
+## Lite
 
-Record `executorStatus`, deliverable presence, and any undeclared operation awaiting a fresh gate in the Review contract. `pendingOperations` contains only newly discovered operations that are not yet covered by the approved Handoff and gates.
+The parent verifies the Executor's changed artifacts, acceptance checks, and fresh relevant tests. Permit at most one scoped revision. Escalate to Full only if evidence reveals high risk, cross-system effects, material ambiguity, or genuinely independent workstreams.
 
-Require the high-level `executionOwner` to be exactly `ChatGPT` for an outer-parent chat answer or `Codex` for Relay/internal-child execution. Do not request concrete tool names or a per-tool ledger.
+## Full
 
-## Verdicts
+Use an independent Reviewer. PASS requires executor success, concrete evidence for every criterion, required tests passed, deliverables present, no blocker/major finding, and no undeclared effect awaiting a gate. Use REVISE for bounded scoped defects and HUMAN_REVIEW for new consequential effects, credentials/authority, cross-backend fallback, or material ambiguity.
 
-### PASS
-
-Issue `PASS` only when all conditions are true:
-
-1. Executor status is `succeeded`.
-2. Every acceptance criterion has `pass` with concrete evidence.
-3. Every required test has `passed` with evidence.
-4. Every declared deliverable is present.
-5. There are no blocker or major findings.
-6. There are no undeclared operations awaiting a fresh gate.
-7. Any model substitution discloses `executionOwner: Codex`, planned and actual model/reasoning pairs, fallback reason, ordered chain and attempts, plus a complete explicit proof that backend, operations, allowed paths, sandbox, permissions, and effects stayed unchanged.
-
-A mock may exercise the state machine, but its final Relay status must remain `SIMULATED_COMPLETED`, never real `COMPLETED`.
-
-### REVISE
-
-Issue `REVISE` for incomplete criteria, failed or missing tests, missing deliverables, scoped defects, or a failed executor that can safely retry. Each revision instruction must name the failed condition and the evidence needed next time.
-
-### HUMAN_REVIEW
-
-Issue `HUMAN_REVIEW` when execution discovers a new risky operation, a fallback crosses backends or changes permissions/effects, fallback scope proof is missing/incomplete, fallback evidence is consequentially ambiguous, the requested judgment is subjective and irreversible, or further progress needs credentials/authority not present in the Handoff.
-
-## Loop bounds
-
-Stop at the smaller configured iteration limit, never exceeding five. Do not turn exhaustion into `PASS`; return `MAX_ITERATIONS` with the last Review and unresolved findings.
-
-Use `schemas/review.schema.json` as the machine-readable output contract.
-
-The schema fail-closes `PASS`: it requires a succeeded executor, passing criteria and tests, present deliverables, no blocker or major findings, no pending operations, no revision instructions, and an iteration from one through five. Schema validation complements rather than replaces comparison with the approved Handoff, including criterion, test, and deliverable completeness.
-
-The final report must name only the high-level `ChatGPT`/`Codex` execution owner and say either that no model substitution occurred or disclose the planned pair, actual pair, reason, chain/attempt context, and complete gate-reuse proof. Do not omit a fallback merely because the task ultimately completed, and do not add a concrete tool ledger.
+Do not repeat every trusted fresh check merely to create a second transcript; rerun critical, failed, stale, or untrusted checks. Never turn mock, dry-run, planning, or an active child into real completion. Record any model fallback audit and keep the final owner limited to `ChatGPT` or `Codex`.

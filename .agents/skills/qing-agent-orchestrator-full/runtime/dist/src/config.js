@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { defaultOrchestrationConfig } from "./orchestration-policy.js";
 import { validateModelCapability } from "./model-router.js";
 export const defaultConfig = {
     executor: {
@@ -19,6 +20,7 @@ export const defaultConfig = {
     },
     relay: { maxIterations: 3 },
     runtime: { stateDirectory: ".qing/runs" },
+    orchestration: defaultOrchestrationConfig,
     modelRouting: { mode: "inherit", healthTtlMs: 3_600_000, probeTimeoutMs: 30_000, candidates: [] },
     security: { approvedGateIds: [] },
 };
@@ -152,18 +154,20 @@ export async function loadConfig(path) {
     const parsed = JSON.parse(await readFile(path, "utf8"));
     if (!isRecord(parsed))
         throw new Error("config must be an object");
-    rejectUnknown(parsed, ["executor", "relay", "runtime", "security", "modelRouting"], "config");
+    rejectUnknown(parsed, ["executor", "relay", "runtime", "security", "orchestration", "modelRouting"], "config");
     const executor = isRecord(parsed.executor) ? parsed.executor : {};
     const codex = isRecord(executor.codexExec) ? executor.codexExec : {};
     const relay = isRecord(parsed.relay) ? parsed.relay : {};
     const runtime = isRecord(parsed.runtime) ? parsed.runtime : {};
     const security = isRecord(parsed.security) ? parsed.security : {};
+    const orchestration = isRecord(parsed.orchestration) ? parsed.orchestration : {};
     const modelRouting = isRecord(parsed.modelRouting) ? parsed.modelRouting : {};
     rejectUnknown(executor, ["mode", "codexExec"], "executor");
     rejectUnknown(codex, ["enabled", "command", "timeoutMs", "probeTimeoutMs", "sandbox", "ephemeral", "ignoreUserConfig", "skipGitRepoCheck", "windowsSandbox", "outputSchemaPath", "maxOutputBytes"], "executor.codexExec");
     rejectUnknown(relay, ["maxIterations"], "relay");
     rejectUnknown(runtime, ["stateDirectory"], "runtime");
     rejectUnknown(security, ["approvedGateIds"], "security");
+    rejectUnknown(orchestration, ["mode", "liteMaxChildren", "fullMaxChildren", "liteMaxRevisions", "fullMaxRevisions", "reviewerMode"], "orchestration");
     rejectUnknown(modelRouting, ["mode", "healthTtlMs", "probeTimeoutMs", "candidates"], "modelRouting");
     const mode = executor.mode ?? defaultConfig.executor.mode;
     if (mode !== "dry-run" && mode !== "mock" && mode !== "codex-exec") {
@@ -189,6 +193,12 @@ export async function loadConfig(path) {
         throw new Error("modelRouting.mode=explicit requires at least one candidate");
     if (modelMode === "inherit" && modelCandidates.length > 0)
         throw new Error("modelRouting candidates require mode=explicit; inherit never silently selects them");
+    const orchestrationMode = orchestration.mode ?? defaultConfig.orchestration.mode;
+    if (orchestrationMode !== "adaptive" && orchestrationMode !== "full")
+        throw new Error("orchestration.mode must be adaptive or full");
+    const reviewerMode = orchestration.reviewerMode ?? defaultConfig.orchestration.reviewerMode;
+    if (reviewerMode !== "risk-based")
+        throw new Error("orchestration.reviewerMode must be risk-based");
     return {
         executor: {
             mode,
@@ -211,6 +221,14 @@ export async function loadConfig(path) {
         },
         runtime: {
             stateDirectory: stringSetting(runtime.stateDirectory, defaultConfig.runtime.stateDirectory, "runtime.stateDirectory"),
+        },
+        orchestration: {
+            mode: orchestrationMode,
+            liteMaxChildren: numberSetting(orchestration.liteMaxChildren, defaultConfig.orchestration.liteMaxChildren, "orchestration.liteMaxChildren", 1, 1),
+            fullMaxChildren: numberSetting(orchestration.fullMaxChildren, defaultConfig.orchestration.fullMaxChildren, "orchestration.fullMaxChildren", 1, 8),
+            liteMaxRevisions: numberSetting(orchestration.liteMaxRevisions, defaultConfig.orchestration.liteMaxRevisions, "orchestration.liteMaxRevisions", 1, 1),
+            fullMaxRevisions: numberSetting(orchestration.fullMaxRevisions, defaultConfig.orchestration.fullMaxRevisions, "orchestration.fullMaxRevisions", 1, 5),
+            reviewerMode: reviewerMode,
         },
         modelRouting: {
             mode: modelMode,
