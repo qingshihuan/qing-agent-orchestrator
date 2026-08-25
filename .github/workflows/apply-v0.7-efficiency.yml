@@ -1,0 +1,59 @@
+name: Apply v0.7 efficiency upgrade
+
+on:
+  push:
+    branches:
+      - feature/v0.7.0-efficiency
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v0.7.0-efficiency
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply source transformations
+        run: python scripts/apply-v0.7-efficiency.py
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Run full tests
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: npm test
+      - run: npm run build
+      - name: Run three-size efficiency benchmark
+        run: node scripts/benchmark-efficiency.mjs
+      - name: Rebuild and validate installable skill archives
+        shell: pwsh
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/v0.7-${{ github.run_id }}"
+      - name: Remove one-shot machinery
+        shell: pwsh
+        run: |
+          Remove-Item -LiteralPath ".github/workflows/export-v0.7-source.yml" -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath ".github/workflows/apply-v0.7-efficiency.yml" -Force
+          Remove-Item -LiteralPath "scripts/apply-v0.7-efficiency.py" -Force
+      - name: Commit validated v0.7 tree
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          if (-not (git diff --cached --quiet)) {
+            git commit -m "feat: v0.7.0 efficiency-first orchestration"
+            git push origin HEAD:feature/v0.7.0-efficiency
+          }
