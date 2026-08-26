@@ -15,6 +15,8 @@ const destructiveTarget = /文件|目录|文件夹|数据|记录|表|字段|列|
 const codeSymbolTarget = /import|依赖|引用|变量|参数|方法|函数|类|接口|类型|注释|空格|警告|未使用|dead\s+code|unused|variable|argument|method|function|class|interface|type|comment|whitespace|warning/i;
 const pathLikeTarget = /(?:^|\s)(?:[\w.-]+\/)+[\w.-]+|[\w.-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|json|ya?ml|md|txt|css|scss|html)(?:\s|$)/i;
 const deleteVerb = /删除|清空|移除|delete|remove|purge|drop/i;
+const inFileContentEdit = /(?:删除|移除|清理).{0,48}(?:[\w.-]+[\/\\])*[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|json|ya?ml|md|txt|css|scss|html)(?:\s*中|\s*里|\s*内|中的|里的|内的)|(?:delete|remove|clean).{0,64}\b(?:from|in|inside)\s+(?:[\w.-]+[\/\\])*[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|json|ya?ml|md|txt|css|scss|html)/i;
+const explicitDeleteTarget = /(?:删除|清空|移除).{0,20}(?:文件|目录|文件夹|数据|记录|表|字段|列|分支|仓库|资源|账户|用户|缓存|日志|数据库|索引|对象|(?:[\w.-]+[\/\\])+[\w.-]+|[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|json|ya?ml|md|txt|css|scss|html))|(?:delete|remove|purge|drop).{0,24}(?:file|directory|folder|data|record|table|column|field|branch|repository|resource|account|user|cache|logs?|database|index|object|(?:[\w.-]+[\/\\])+[\w.-]+|[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|json|ya?ml|md|txt|css|scss|html))/i;
 const gitPushAction = /(?:Git\s*)?推送|git\s+push|push\s+(?:to|branch|tag|origin)/i;
 const purchaseAction = /购买|支付|付费|purchase|payment|buy\b/i;
 const globalWriteAction = /全局|系统级|系统范围|global|system[- ]wide/i;
@@ -73,7 +75,10 @@ export function routeTask(text, options = {}) {
         signals.push("plan-then-execute");
     if (orchestrationExecution.test(effective))
         signals.push("orchestration-execution");
-    if (hasDeleteEffect(effective))
+    const deleteIntent = !inFileContentEdit.test(effective)
+        && (explicitDeleteTarget.test(effective)
+            || (deleteVerb.test(effective) && destructiveTarget.test(effective) && !codeSymbolTarget.test(effective)));
+    if (deleteIntent)
         signals.push("delete-action");
     if (gitPushAction.test(effective))
         signals.push("git-push-action");

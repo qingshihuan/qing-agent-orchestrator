@@ -1,6 +1,30 @@
 # Changelog
 
-本项目采用语义化版本编号。当前稳定版本为 `v0.6.0`；既有版本的历史记录与标签语义保持不变。
+本项目采用语义化版本编号。当前稳定版本为 `v0.7.0`；既有版本的历史记录与标签语义保持不变。
+
+## 0.7.0 - 2026-08-26
+
+### Added
+
+- `--compact` 控制面输出：保留状态、档位、预算、真实模型、审批和下一步，省略重复 Handoff/路由详情。
+- 跨进程模型健康缓存；热缓存不再重复 entitlement 模型调用，fallback 只在主候选不可用时按链懒探测。
+- 短、中、长三档确定性效率基准和回归测试。
+
+### Changed
+
+- Lite 固定使用 normal 成本档位选择单一 Executor；复杂度或风险不再让 Lite 首次调用直接升级到 Sol/xhigh。
+- 删除判断区分“删除文件”和“删除文件内部代码”；`index.js` 等文件内编辑保持 Direct。
+- Git 审计保留完整 tracked 路径索引，但只读取并哈希 dirty/untracked/deleted 内容。
+- RunStore 追加事件时从 durable lastEvent 恢复 sequence，不再反复读取完整 JSONL 历史。
+
+### Fixed
+
+- 单次 Relay criterion evidence 格式错误不再污染后续修订轮次。
+
+### Evidence boundary
+
+- 三档基准记录的是路由、模型档位、控制面字节数和确定性运行时开销；控制面字节数是 token 代理，不是服务端计费 token。
+- 实际模型生成 token、端到端成功率和真实任务墙钟收益仍需在相同仓库快照与模型下进行 connected A/B。
 
 ## 0.6.0 - 2026-08-25
 

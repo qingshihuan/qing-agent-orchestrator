@@ -3,8 +3,18 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*.*.*"
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - ".agents/skills/qing-agent-orchestrator-full/runtime/package.json"
+      - "CHANGELOG.md"
+      - "docs/release-notes-v*.md"
+      - "artifacts/**"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
 
 permissions:

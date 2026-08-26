@@ -1,0 +1,56 @@
+{
+  "version": "0.7.0",
+  "measuredAt": "2026-08-26T03:42:55.245Z",
+  "evidenceBoundary": "Control-plane output bytes are a token proxy, not provider billing tokens. No model generation call is made by this benchmark.",
+  "routeTiming": {
+    "iterations": 200000,
+    "elapsedMs": 1280.485,
+    "microsecondsPerRoute": 6.402
+  },
+  "tasks": [
+    {
+      "size": "short",
+      "tier": "direct",
+      "childBudget": 0,
+      "independentReviewer": false,
+      "model": null,
+      "fullBytes": 1650,
+      "compactBytes": 464,
+      "reductionPct": 71.9,
+      "tokenProxyFull": 413,
+      "tokenProxyCompact": 116,
+      "status": "DIRECT_EXECUTION_REQUIRED"
+    },
+    {
+      "size": "medium",
+      "tier": "lite",
+      "childBudget": 1,
+      "independentReviewer": false,
+      "model": {
+        "model": "gpt-5.6-luna",
+        "reasoningEffort": "medium",
+        "role": "executor",
+        "fallbackFrom": null
+      },
+      "fullBytes": 6338,
+      "compactBytes": 560,
+      "reductionPct": 91.2,
+      "tokenProxyFull": 1585,
+      "tokenProxyCompact": 140,
+      "status": "LITE_EXECUTION_REQUIRED"
+    },
+    {
+      "size": "long",
+      "tier": "direct",
+      "childBudget": 0,
+      "independentReviewer": false,
+      "model": null,
+      "fullBytes": 1714,
+      "compactBytes": 464,
+      "reductionPct": 72.9,
+      "tokenProxyFull": 429,
+      "tokenProxyCompact": 116,
+      "status": "DIRECT_EXECUTION_REQUIRED"
+    }
+  ]
+}

@@ -137,9 +137,7 @@ class FileRunHandle implements RunHandle {
       }
       try {
         this.record = JSON.parse(await readFile(this.recordPath, "utf8")) as RunRecord;
-        const text = await readFile(this.eventsPath, "utf8").catch(() => "");
-        const events = text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as RunEvent);
-        this.sequence = events.reduce((maximum, event) => Math.max(maximum, event.sequence), 0);
+        this.sequence = Math.max(this.sequence, this.record.lastEvent?.sequence ?? 0);
         return await operation();
       } finally {
         await unlink(this.lockPath).catch(() => undefined);

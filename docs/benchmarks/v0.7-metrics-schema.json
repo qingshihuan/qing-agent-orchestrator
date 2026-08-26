@@ -1,0 +1,19 @@
+{
+  "version": "0.7.0",
+  "metrics": [
+    "tier",
+    "childBudget",
+    "independentReviewer",
+    "delegatedModel",
+    "reasoningEffort",
+    "fullControlPlaneBytes",
+    "compactControlPlaneBytes",
+    "controlPlaneReductionPct",
+    "microsecondsPerRoute"
+  ],
+  "notMeasured": [
+    "providerBillingTokens",
+    "realModelGenerationLatency",
+    "connectedTaskSuccessRate"
+  ]
+}

@@ -93,14 +93,15 @@ export class Relay {
     const attempts: RelayAttempt[] = [];
     const maxIterations = Math.max(1, Math.min(5, handoff.maxIterations, options.maxIterations));
     let revisionInstructions: string[] = [];
-    const criterionEvidenceErrors: string[] = [];
+    const persistentCriterionEvidenceErrors: string[] = [];
     if (runHandle) {
       await runHandle.appendEvent("gate.allowed", "preflight", 0, "Safety gate allowed the declared operations.");
     } else if (handoff.acceptanceCriteria.some(({ verificationOwner }) => verificationOwner !== "executor")) {
-      criterionEvidenceErrors.push("Relay-owned criteria require a current durable RunHandle.");
+      persistentCriterionEvidenceErrors.push("Relay-owned criteria require a current durable RunHandle.");
     }
 
     for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+      const criterionEvidenceErrors = [...persistentCriterionEvidenceErrors];
       let gitAudit: GitScopeComparison | null = null;
       const shouldAuditGit = this.executor.name === "codex-exec" && handoff.requestedOperations.some(({ type }) => type !== "read");
       const gitBefore = shouldAuditGit ? await captureGitSnapshot(handoff.workspace.root) : null;
