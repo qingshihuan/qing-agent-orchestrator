@@ -24,6 +24,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Normalize the v0.6.1 routing baseline for the one-shot transformer
+        shell: pwsh
+        run: |
+          $path = "src/task-router.ts"
+          $text = Get-Content -LiteralPath $path -Raw
+          $current = 'if (hasDeleteEffect(effective)) signals.push("delete-action");'
+          $baseline = 'if (deleteVerb.test(effective) && (destructiveTarget.test(effective) || pathLikeTarget.test(effective)) && !codeSymbolTarget.test(effective)) signals.push("delete-action");'
+          if ($text.Contains($current)) {
+            $text = $text.Replace($current, $baseline)
+            Set-Content -LiteralPath $path -Value $text -Encoding utf8NoBOM -NoNewline
+          }
       - name: Apply source transformations
         run: python scripts/apply-v0.7-efficiency.py
       - run: npm ci --ignore-scripts
