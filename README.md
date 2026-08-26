@@ -1,6 +1,6 @@
 # 青-Agent-Orchestrator
 
-[English](README.en.md) · [v0.6.0 发布说明](docs/release-notes-v0.6.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
+[English](README.en.md) · [v0.8.0 发布说明](docs/release-notes-v0.8.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
 **让擅长理解、规划和沟通的模型先把事情想清楚，让擅长代码与工程执行的 Codex 完成实现与验证。**
 
@@ -27,6 +27,15 @@
 模型候选明确绑定 `desktop-child` 或 `codex-cli`。桌面候选继续以宿主公布的能力快照为准，内部子任务实际接收 `{ model, reasoning_effort }`，显式值只作用于委派后端，不改变父任务模型。CLI 路径实际接收 `-m` 和 `model_reasoning_effort`；配置层可以表达 `minimal|low|medium|high|xhigh|max|ultra`，但当前安装的 `codex debug models --bundled` 目录才是模型、推理强度和最低客户端版本的权威来源。CLI 候选还必须通过受限、只读、结构化的账户 entitlement 探针，目录有效但账户不可用的组合不会进入健康状态。
 
 这些可用性是当前 host/运行时快照，可能随版本、账户和 entitlement 漂移。普通与高风险任务都采用 completion-first 策略：CLI 候选必须通过现有健康预检，桌面真实 spawn 被拒绝时，只能沿内部显式、能力有效、同后端 fallback 链继续；链耗尽即失败关闭，绝不隐式选择无关候选。备用 pair 不提前展示，只有替换实际使用后才输出 `executionOwner: Codex`、被拒绝/实际 pair、原因、链与尝试，以及完整 scope 证明。CLI 真实调用只有在错误明确点名当前所选 model ID，并说明该模型 unknown、account/entitlement 不支持、metadata not found 或 unavailable 时才有限回退；认证、进程、超时、取消、输出上限、协议、model output schema 或其他普通错误不重试。缺失或不完整的 scope 证明要求新 gate。ChatGPT/Codex 订阅访问不等于 Responses API entitlement；本项目没有 provider URL、token 或 API adapter。
+
+## v0.8.0 发布重点
+
+- **阶段重新分档：** 每次新用户消息及委派里程碑只评估剩余工作，Full 可以降到 Lite 或 Direct，不再整轮锁定。
+- **审查义务不丢失：** 高风险产物未验收时，即使中间阶段降档，最终验收前仍会恢复独立 Reviewer。
+- **更少的协调消耗：** 未变化状态等待事件；真实停滞后只作一次接管/替换决定，禁止反复轮询和中断/重启循环。
+- **更紧的默认预算：** Full 默认最多 2 个子任务和 1 次修订；显式、有界配置仍可提高该上限。
+- **可验收的 Lite 结果：** `PARENT_VERIFICATION_REQUIRED` 附带实际 Executor 证据和后置 gate（如有），但绝不伪造 Reviewer 结论。
+- **旧合同需内容绑定：** v0.7 `3/2` 仅可用精确 `{ id, fingerprint }` 显式迁移，不能复用同 ID 的新 Handoff。
 
 ## v0.6.0 发布重点
 
@@ -166,10 +175,10 @@ npm run typecheck
 npm test
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator-full
-powershell -NoProfile -File scripts/package-skill-editions.ps1 -Validate
+pwsh -NoProfile -File scripts/package-skill-editions.ps1 -Validate
 ```
 
-打包脚本先写入最终 ZIP，再生成 `artifacts/SHA256SUMS.txt`。`-Validate` 要求 manifest 恰好包含两个归档并复算哈希，同时把完整版本的精确文件清单和每个文件 SHA-256 与声明的技能源码、`dist/src`、schemas、runtime 配置/package 逐项比较；它不再用文件数量代替内容验证。
+打包必须使用与发布工作流一致的 **PowerShell Core 7.6.x（`pwsh`）**；Windows PowerShell 5.1 会被脚本明确拒绝，避免生成内容正确但字节不同、无法通过 CI 复建校验的 ZIP。打包脚本先写入最终 ZIP，再生成 `artifacts/SHA256SUMS.txt`。`-Validate` 要求 manifest 恰好包含两个归档并复算哈希，同时把完整版本的精确文件清单和每个文件 SHA-256 与声明的技能源码、`dist/src`、schemas、runtime 配置/package 逐项比较；它不再用文件数量代替内容验证。
 
 架构、证据边界和信任模型见[架构与边界](docs/architecture.md)。版本变化见 [CHANGELOG](CHANGELOG.md)，贡献方式见 [CONTRIBUTING](CONTRIBUTING.md)，安全问题请阅读 [SECURITY](SECURITY.md)。
 

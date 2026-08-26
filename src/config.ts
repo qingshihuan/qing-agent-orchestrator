@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { defaultOrchestrationConfig } from "./orchestration-policy.js";
 import { validateModelCapability } from "./model-router.js";
-import type { ComplexityBand, ModelAvailability, ModelBackend, ModelCandidate, ModelReasoningEffort, ModelRole, OrchestrationMode, RelayConfig, ReviewerMode, TaskCategory } from "./types.js";
+import type { ComplexityBand, LegacyV07CompatibilityEntry, ModelAvailability, ModelBackend, ModelCandidate, ModelReasoningEffort, ModelRole, OrchestrationMode, RelayConfig, ReviewerMode, TaskCategory } from "./types.js";
 
 export const defaultConfig: RelayConfig = {
   executor: {
@@ -61,6 +61,20 @@ function stringArray(value: unknown, name: string): string[] {
     throw new Error(`${name} must be an array of non-empty strings`);
   }
   return [...value];
+}
+
+function legacyV07Compatibility(value: unknown): LegacyV07CompatibilityEntry[] {
+  if (!Array.isArray(value)) throw new Error("orchestration.legacyV07Compatibility must be an array");
+  const entries = value.map((item, index): LegacyV07CompatibilityEntry => {
+    if (!isRecord(item)) throw new Error(`orchestration.legacyV07Compatibility[${index}] must be an object`);
+    rejectUnknown(item, ["id", "fingerprint"], `orchestration.legacyV07Compatibility[${index}]`);
+    const id = stringSetting(item.id, "", `orchestration.legacyV07Compatibility[${index}].id`);
+    const fingerprint = stringSetting(item.fingerprint, "", `orchestration.legacyV07Compatibility[${index}].fingerprint`);
+    if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error(`orchestration.legacyV07Compatibility[${index}].fingerprint must be a lowercase SHA-256 hex digest`);
+    return { id, fingerprint };
+  });
+  if (new Set(entries.map(({ id }) => id)).size !== entries.length) throw new Error("orchestration.legacyV07Compatibility contains duplicate Handoff IDs");
+  return entries;
 }
 
 const modelToken = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,127}$/;
@@ -153,7 +167,7 @@ export async function loadConfig(path?: string): Promise<RelayConfig> {
   rejectUnknown(relay, ["maxIterations"], "relay");
   rejectUnknown(runtime, ["stateDirectory"], "runtime");
   rejectUnknown(security, ["approvedGateIds"], "security");
-  rejectUnknown(orchestration, ["mode", "liteMaxChildren", "fullMaxChildren", "liteMaxRevisions", "fullMaxRevisions", "reviewerMode"], "orchestration");
+  rejectUnknown(orchestration, ["mode", "liteMaxChildren", "fullMaxChildren", "liteMaxRevisions", "fullMaxRevisions", "reviewerMode", "legacyV07Compatibility"], "orchestration");
   rejectUnknown(modelRouting, ["mode", "healthTtlMs", "probeTimeoutMs", "candidates"], "modelRouting");
 
   const mode = executor.mode ?? defaultConfig.executor.mode;
@@ -216,6 +230,8 @@ export async function loadConfig(path?: string): Promise<RelayConfig> {
       liteMaxRevisions: numberSetting(orchestration.liteMaxRevisions, defaultConfig.orchestration.liteMaxRevisions, "orchestration.liteMaxRevisions", 1, 1) as 1,
       fullMaxRevisions: numberSetting(orchestration.fullMaxRevisions, defaultConfig.orchestration.fullMaxRevisions, "orchestration.fullMaxRevisions", 1, 5),
       reviewerMode: reviewerMode as ReviewerMode,
+      fullBudgetSource: Object.hasOwn(orchestration, "fullMaxChildren") || Object.hasOwn(orchestration, "fullMaxRevisions") ? "explicit" : "default",
+      legacyV07Compatibility: legacyV07Compatibility(orchestration.legacyV07Compatibility ?? []),
     },
     modelRouting: {
       mode: modelMode,

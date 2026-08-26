@@ -41,12 +41,12 @@ const started = performance.now();
 for (let index = 0; index < iterations; index += 1) routeTask(tasks[index % tasks.length].text);
 const elapsedMs = performance.now() - started;
 const report = {
-  version: "0.7.0",
+  version: "0.8.0",
   measuredAt: new Date().toISOString(),
   evidenceBoundary: "Control-plane output bytes are a token proxy, not provider billing tokens. No model generation call is made by this benchmark.",
   routeTiming: { iterations, elapsedMs: Number(elapsedMs.toFixed(3)), microsecondsPerRoute: Number((elapsedMs * 1000 / iterations).toFixed(3)) },
   tasks: results,
 };
 mkdirSync("artifacts/benchmarks", { recursive: true });
-writeFileSync("artifacts/benchmarks/v0.7-efficiency.json", JSON.stringify(report, null, 2) + "\n");
+writeFileSync("artifacts/benchmarks/v0.8-efficiency.json", JSON.stringify(report, null, 2) + "\n");
 process.stdout.write(JSON.stringify(report, null, 2) + "\n");

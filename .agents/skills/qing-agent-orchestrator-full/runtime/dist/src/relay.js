@@ -2,6 +2,8 @@ import { NodeProcessRunner } from "./process-runner.js";
 import { evaluateSafetyGate } from "./safety-gate.js";
 import { collectRelayCriterionEvidence } from "./relay-criterion-collector.js";
 import { captureGitSnapshot, compareGitSnapshots } from "./git-audit.js";
+import { recordIndependentReviewOutcome, reclassifyRemainingPhase } from "./orchestration-policy.js";
+import { routeTask } from "./task-router.js";
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
 export const DEFAULT_TEST_TIMEOUT_MS = 120_000;
 export const DEFAULT_TEST_OUTPUT_BYTES = 1_000_000;
@@ -27,6 +29,9 @@ function terminalRunState(status) {
     if (status === "MAX_ITERATIONS") {
         return { status: "max-iterations", phase: "failed", processState: "failed" };
     }
+    if (status === "PARENT_ACTION_REQUIRED" || status === "PARENT_VERIFICATION_REQUIRED") {
+        return { status: "human-review", phase: "blocked", processState: "not-started" };
+    }
     return { status: "human-review", phase: "blocked", processState: "failed" };
 }
 export class Relay {
@@ -40,6 +45,31 @@ export class Relay {
     }
     async run(handoff, options) {
         const runHandle = options.runHandle;
+        const phaseEnforcementEnabled = handoff.metadata?.orchestrationPolicyVersion === "0.8";
+        const phaseDecisions = [];
+        let phaseState = {
+            previousTier: handoff.orchestration?.tier ?? "full",
+            pendingIndependentReview: handoff.orchestration?.independentReviewer ?? true,
+            unacceptedHighRiskArtifact: handoff.orchestration?.independentReviewer ?? true,
+        };
+        const classifyRemainingPhase = async (iteration, milestone, text) => {
+            const routed = routeTask(text, options.orchestrationConfig ? { orchestration: options.orchestrationConfig } : {});
+            const phase = reclassifyRemainingPhase({
+                text,
+                route: routed.route,
+                category: routed.category,
+                complexity: routed.complexity,
+                signals: routed.signals,
+                config: options.orchestrationConfig,
+                milestone,
+                state: phaseState,
+            });
+            phaseState = phase.state;
+            phaseDecisions.push({ iteration, milestone, tier: phase.decision.tier, pendingIndependentReview: phase.state.pendingIndependentReview, restoredForIndependentReview: phase.restoredForIndependentReview });
+            if (runHandle)
+                await runHandle.appendEvent("orchestration.phase.reclassified", milestone === "before-review" ? "reviewing" : "executing", iteration, "Remaining phase reclassified.", { milestone, tier: phase.decision.tier, pendingIndependentReview: phase.state.pendingIndependentReview, restoredForIndependentReview: phase.restoredForIndependentReview });
+            return phase;
+        };
         const preflightGate = evaluateSafetyGate(handoff, options.approvedGateIds);
         if (preflightGate.outcome !== "ALLOW") {
             if (runHandle) {
@@ -52,6 +82,7 @@ export class Relay {
                 status: "BLOCKED",
                 preflightGate,
                 attempts: [],
+                phaseDecisions,
                 message: preflightGate.outcome === "DENY"
                     ? "Safety gate denied at least one operation. Edit the Handoff; approvals cannot override a denial."
                     : "Human approval is required. Re-run with the listed gate IDs after a person reviews the exact operations.",
@@ -68,6 +99,16 @@ export class Relay {
             persistentCriterionEvidenceErrors.push("Relay-owned criteria require a current durable RunHandle.");
         }
         for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+            const executionPhase = await classifyRemainingPhase(iteration, iteration === 1 ? "before-child-creation" : "before-revision", iteration === 1 ? handoff.objective : revisionInstructions.join("\n") || handoff.objective);
+            if (phaseEnforcementEnabled && executionPhase.decision.tier === "direct") {
+                if (runHandle) {
+                    const terminal = terminalRunState("PARENT_ACTION_REQUIRED");
+                    await runHandle.appendEvent("orchestration.parent-action-required", "blocked", iteration, "Remaining phase requires direct parent action; Relay did not invoke an Executor or Reviewer.");
+                    await runHandle.finalize(terminal.status, terminal.phase, iteration, terminal.processState, "Remaining phase was reclassified Direct and requires parent action.");
+                }
+                return { handoffId: handoff.id, executor: this.executor.name, status: "PARENT_ACTION_REQUIRED", preflightGate, attempts, phaseDecisions, message: "Remaining work was reclassified Direct. Relay intentionally did not invoke an Executor or Reviewer; the parent must complete and verify this phase before acceptance." };
+            }
+            const parentVerificationRequired = phaseEnforcementEnabled && executionPhase.decision.tier === "lite";
             const criterionEvidenceErrors = [...persistentCriterionEvidenceErrors];
             let gitAudit = null;
             const shouldAuditGit = this.executor.name === "codex-exec" && handoff.requestedOperations.some(({ type }) => type !== "read");
@@ -213,7 +254,7 @@ export class Relay {
             if (this.executor.name === "codex-exec" && handoff.testPlan.length > 0 && runHandle) {
                 for (const command of handoff.testPlan) {
                     if (await runHandle.isCancelled()) {
-                        return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, message: "Run was cancelled; Relay stopped before further tests or review." };
+                        return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Run was cancelled; Relay stopped before further tests or review." };
                     }
                     const startedAt = new Date().toISOString();
                     const shell = process.platform === "win32"
@@ -236,7 +277,7 @@ export class Relay {
                     const endedAt = new Date().toISOString();
                     await runHandle.appendEvent("test.exited", "executing", iteration, "Relay parent test exited.", { command, pid: handle.pid, exitCode: result.exitCode, timedOut: result.timedOut, cancelled: result.cancelled === true, outputLimitExceeded: result.outputLimitExceeded, spawnError: result.spawnError });
                     if (await runHandle.isCancelled()) {
-                        return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, message: "Run was cancelled during a parent-owned test; Relay stopped before further tests or review." };
+                        return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Run was cancelled during a parent-owned test; Relay stopped before further tests or review." };
                     }
                     await runHandle.writeProcessMetadata({ ...metadata, state: processStateFromExit({ pid: handle.pid, exitCode: result.exitCode, signal: result.signal, endedAt, cancelled: result.cancelled === true, timedOut: result.timedOut, outputLimitExceeded: result.outputLimitExceeded }), endedAt, exitCode: result.exitCode, signal: result.signal, cancelled: result.cancelled === true, timedOut: result.timedOut, outputLimitExceeded: result.outputLimitExceeded });
                     trustedCommands.push({ version: "1.0", source: "relay", runId: runHandle.runId, handoffId: handoff.id, iteration, command, exitCode: result.exitCode, startedAt, endedAt, timedOut: result.timedOut, cancelled: result.cancelled === true, outputLimitExceeded: result.outputLimitExceeded, spawnError: result.spawnError, stdout: redact(result.stdout), stderr: redact(result.stderr), recordedAt: endedAt });
@@ -262,6 +303,27 @@ export class Relay {
             if (execution.proposedOperations.length > 0) {
                 postExecutionGate = evaluateSafetyGate({ ...handoff, id: `${handoff.id}-iteration-${iteration}`, requestedOperations: execution.proposedOperations }, options.approvedGateIds);
             }
+            if (postExecutionGate && postExecutionGate.outcome !== "ALLOW") {
+                if (runHandle) {
+                    const terminal = terminalRunState("BLOCKED");
+                    await runHandle.finalize(terminal.status, terminal.phase, iteration, terminal.processState, "Executor proposed undeclared operations.");
+                }
+                return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Executor proposed undeclared operations. Relay stopped for a new safety decision." };
+            }
+            if (parentVerificationRequired) {
+                const pendingParentVerification = {
+                    iteration,
+                    execution,
+                    ...(postExecutionGate ? { postExecutionGate } : {}),
+                    reviewerInvoked: false,
+                };
+                if (runHandle) {
+                    const terminal = terminalRunState("PARENT_VERIFICATION_REQUIRED");
+                    await runHandle.appendEvent("orchestration.parent-verification-required", "blocked", iteration, "Lite phase completed by Executor; Relay skipped independent review and returned verification to the parent.", { pendingIndependentReview: phaseState.pendingIndependentReview });
+                    await runHandle.finalize(terminal.status, terminal.phase, iteration, terminal.processState, "Lite phase requires parent verification before final acceptance.");
+                }
+                return { handoffId: handoff.id, executor: this.executor.name, status: "PARENT_VERIFICATION_REQUIRED", preflightGate, attempts, phaseDecisions, pendingParentVerification, message: "Remaining work was reclassified Lite. Relay invoked one Executor but intentionally skipped the independent Reviewer; the parent must verify the attached execution evidence and preserve any pending final-review obligation." };
+            }
             let persistedEvidence = [];
             if (runHandle) {
                 try {
@@ -276,6 +338,7 @@ export class Relay {
                     await runHandle.appendEvent("criterion-evidence.invalid", "reviewing", iteration, message);
                 }
             }
+            await classifyRemainingPhase(iteration, "before-review", "final acceptance of the current artifact and evidence");
             let review = await this.reviewer.review(handoff, execution, iteration, persistedEvidence, this.executor.name === "codex-exec" ? trustedCommands : undefined);
             if (gitAudit?.requiresHumanReview) {
                 review = {
@@ -306,24 +369,13 @@ export class Relay {
                 await runHandle.writeReview(review, iteration);
                 await runHandle.appendEvent("review.completed", "reviewing", iteration, "Reviewer completed the iteration.", { verdict: review.verdict });
             }
+            phaseState = recordIndependentReviewOutcome(phaseState, review.verdict);
+            if (runHandle)
+                await runHandle.appendEvent("orchestration.review.outcome", "reviewing", iteration, "Independent review outcome committed.", { verdict: review.verdict, pendingIndependentReview: phaseState.pendingIndependentReview });
             const attempt = { iteration, execution, review };
             if (postExecutionGate)
                 attempt.postExecutionGate = postExecutionGate;
             attempts.push(attempt);
-            if (postExecutionGate && postExecutionGate.outcome !== "ALLOW") {
-                if (runHandle) {
-                    const terminal = terminalRunState("BLOCKED");
-                    await runHandle.finalize(terminal.status, terminal.phase, iteration, terminal.processState, "Executor proposed undeclared operations.");
-                }
-                return {
-                    handoffId: handoff.id,
-                    executor: this.executor.name,
-                    status: "BLOCKED",
-                    preflightGate,
-                    attempts,
-                    message: "Executor proposed undeclared operations. Relay stopped for a new safety decision.",
-                };
-            }
             if (review.verdict === "PASS") {
                 const status = execution.simulated ? "SIMULATED_COMPLETED" : "COMPLETED";
                 if (runHandle) {
@@ -336,6 +388,7 @@ export class Relay {
                     status,
                     preflightGate,
                     attempts,
+                    phaseDecisions,
                     message: execution.simulated
                         ? "Workflow loop completed with mock evidence only; no real task was executed."
                         : "Executor result passed all deterministic review rules.",
@@ -352,6 +405,7 @@ export class Relay {
                     status: "BLOCKED",
                     preflightGate,
                     attempts,
+                    phaseDecisions,
                     message: "Reviewer requested human review.",
                 };
             }
@@ -367,6 +421,7 @@ export class Relay {
             status: "MAX_ITERATIONS",
             preflightGate,
             attempts,
+            phaseDecisions,
             message: `Stopped after ${maxIterations} iteration(s) without PASS.`,
         };
     }

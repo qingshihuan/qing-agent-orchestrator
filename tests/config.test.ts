@@ -16,8 +16,8 @@ test("default config keeps real Codex execution disabled", async () => {
   assert.equal(config.modelRouting.mode, "inherit");
   assert.deepEqual(config.modelRouting.candidates, []);
   assert.deepEqual(config.orchestration, {
-    mode: "adaptive", liteMaxChildren: 1, fullMaxChildren: 3,
-    liteMaxRevisions: 1, fullMaxRevisions: 2, reviewerMode: "risk-based",
+    mode: "adaptive", liteMaxChildren: 1, fullMaxChildren: 2,
+    liteMaxRevisions: 1, fullMaxRevisions: 1, reviewerMode: "risk-based", fullBudgetSource: "default", legacyV07Compatibility: [],
   });
 });
 
@@ -94,12 +94,23 @@ test("legacy config gains adaptive orchestration defaults and budgets remain bou
     const legacy = await loadConfig(await write("legacy.json", { relay: { maxIterations: 3 } }));
     assert.equal(legacy.orchestration.mode, "adaptive");
     assert.equal(legacy.orchestration.liteMaxChildren, 1);
+    assert.equal(legacy.orchestration.fullMaxChildren, 2);
+    assert.equal(legacy.orchestration.fullMaxRevisions, 1);
+    assert.equal(legacy.orchestration.fullBudgetSource, "default");
+    assert.deepEqual(legacy.orchestration.legacyV07Compatibility, []);
+    const explicitDefaultBudget = await loadConfig(await write("explicit-default-budget.json", { orchestration: { fullMaxChildren: 2, fullMaxRevisions: 1 } }));
+    assert.equal(explicitDefaultBudget.orchestration.fullBudgetSource, "explicit");
     const explicit = await loadConfig(await write("explicit.json", { orchestration: { mode: "full", liteMaxChildren: 1, fullMaxChildren: 4, liteMaxRevisions: 1, fullMaxRevisions: 3, reviewerMode: "risk-based" } }));
     assert.equal(explicit.orchestration.fullMaxChildren, 4);
     assert.equal(explicit.orchestration.fullMaxRevisions, 3);
     await assert.rejects(loadConfig(await write("lite-children.json", { orchestration: { liteMaxChildren: 2 } })), /liteMaxChildren must be an integer from 1 to 1/);
     await assert.rejects(loadConfig(await write("lite-revisions.json", { orchestration: { liteMaxRevisions: 2 } })), /liteMaxRevisions must be an integer from 1 to 1/);
     await assert.rejects(loadConfig(await write("reviewer.json", { orchestration: { reviewerMode: "always" } })), /reviewerMode must be risk-based/);
+    const fingerprint = "a".repeat(64);
+    const trusted = await loadConfig(await write("trusted-v07.json", { orchestration: { legacyV07Compatibility: [{ id: "v07", fingerprint }] } }));
+    assert.deepEqual(trusted.orchestration.legacyV07Compatibility, [{ id: "v07", fingerprint }]);
+    await assert.rejects(loadConfig(await write("id-only-v07.json", { orchestration: { legacyV07HandoffIds: ["v07"] } })), /unknown or forbidden fields.*legacyV07HandoffIds/);
+    await assert.rejects(loadConfig(await write("bad-v07-digest.json", { orchestration: { legacyV07Compatibility: [{ id: "v07", fingerprint: "short" }] } })), /lowercase SHA-256/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -204,7 +215,7 @@ test("legacy run and contract-aware run enforce tier revision and child budgets"
   const base = { command: process.execPath, cwd: process.cwd(), stdin: "", timeoutMs: 10_000, maxOutputBytes: 256_000 };
   const original = JSON.parse(await readFile("examples/smoke-test/handoff.json", "utf8")) as Record<string, unknown>;
   const config = join(directory, "relay.json");
-  await writeFile(config, JSON.stringify({ relay: { maxIterations: 5 }, runtime: { stateDirectory: join(directory, "runs") } }), "utf8");
+  await writeFile(config, JSON.stringify({ relay: { maxIterations: 5 }, runtime: { stateDirectory: join(directory, "runs") }, orchestration: { fullMaxChildren: 3, fullMaxRevisions: 2 } }), "utf8");
   const run = async (name: string, value: Record<string, unknown>) => {
     const path = join(directory, `${name}.json`);
     await writeFile(path, JSON.stringify(value), "utf8");

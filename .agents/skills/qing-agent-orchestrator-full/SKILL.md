@@ -11,6 +11,12 @@ Use the smallest sufficient tier before choosing a model:
 - **Lite:** at most one Executor, parent verification, and at most one revision.
 - **Full:** structured Handoff, bounded Executor budget, independent Reviewer, and bounded revisions; use only for high-risk/global/external effects, cross-system work, genuinely parallel work, release/deploy, explicit Full/Level 3, or an accepted process-backend need.
 
+Reclassify the **remaining phase** on every new user turn and immediately before child creation, reactivation, revision, or review; never retain Full only because an earlier phase needed it. De-escalate Full → Lite → Direct whenever the remaining phase permits. Keep a pending independent-review obligation for an unaccepted high-risk artifact through any temporary downgrade, and restore Full only immediately before final acceptance. Full defaults to at most two children and one revision unless an explicit bounded configuration overrides those defaults.
+
+For an enforced v0.8 Relay phase, Direct returns `PARENT_ACTION_REQUIRED` without an Executor or Reviewer; Lite may run one Executor then returns `PARENT_VERIFICATION_REQUIRED` with that actual execution evidence and no fabricated Review. Neither is completion, and any pending final-review obligation remains intact.
+
+Use milestone-driven coordination: wait once for a bounded event or terminal result, then make one takeover/replacement decision only after a real no-progress timeout. Do not repeatedly poll unchanged state, interrupt a live child merely for slowness, or enter an interrupt/reactivate loop.
+
 Read [orchestrator-spec.md](references/orchestrator-spec.md) for deterministic routing, [safety-gates.md](references/safety-gates.md) for effect approvals, and [reviewer-rules.md](references/reviewer-rules.md) for tiered verification. Select a model/reasoning pair only after a tier justifies delegation. Before creation or reactivation, display only the child role/task, `ChatGPT`/`Codex` ownership, explicit model, and reasoning effort. Do not restate the unchanged-parent invariant or preannounce fallback models. If a replacement is actually used after rejection, disclose the reason and actual replacement in the next progress or final result.
 
 ## Optional process backend

@@ -4,6 +4,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# ZipArchive writes different byte streams under Windows PowerShell 5.1 and
+# PowerShell Core. Release CI uses pwsh 7.6, so pin the producer rather than
+# silently accepting a locally valid archive that CI will reject.
+if ($PSVersionTable.PSEdition -ne "Core" -or
+    $PSVersionTable.PSVersion.Major -ne 7 -or
+    $PSVersionTable.PSVersion.Minor -ne 6) {
+  throw "package-skill-editions.ps1 requires PowerShell Core 7.6.x (pwsh), matching the release workflow; Windows PowerShell 5.1 is unsupported for deterministic archives."
+}
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $standardRoot = Join-Path $projectRoot ".agents\skills\qing-agent-orchestrator"
 $fullRoot = Join-Path $projectRoot ".agents\skills\qing-agent-orchestrator-full"
@@ -40,7 +48,8 @@ function Get-PackageFileBytes([string] $Path) {
 function Get-PackageFileHash([string] $Path) {
   $sha256 = [System.Security.Cryptography.SHA256]::Create()
   try {
-    return [Convert]::ToHexString($sha256.ComputeHash((Get-PackageFileBytes $Path)))
+    # Keep the conversion stable across the pinned PowerShell 7.6 runtime.
+    return [BitConverter]::ToString($sha256.ComputeHash((Get-PackageFileBytes $Path))).Replace("-", "")
   }
   finally {
     $sha256.Dispose()
@@ -107,7 +116,10 @@ function Assert-DeterministicZip([string] $ArchivePath, [string] $Label) {
       if ($entry.ExternalAttributes -ne 0) {
         throw "$Label archive entry has non-normalized external attributes: $($entry.FullName)"
       }
-      if ($entry.CompressedLength -ne $entry.Length) {
+      # NoCompression ZIP entries can include a small framing overhead, making
+      # CompressedLength greater than Length. Only a smaller value proves data
+      # compression was applied.
+      if ($entry.CompressedLength -lt $entry.Length) {
         throw "$Label archive entry is compressed and may vary across runtime versions: $($entry.FullName)"
       }
       if ($packageTextExtensions -contains [System.IO.Path]::GetExtension($entry.FullName).ToLowerInvariant()) {
@@ -169,7 +181,7 @@ $safeConfig = @'
     }
   },
   "relay": { "maxIterations": 3 },
-  "orchestration": { "mode": "adaptive", "liteMaxChildren": 1, "fullMaxChildren": 3, "liteMaxRevisions": 1, "fullMaxRevisions": 2, "reviewerMode": "risk-based" },
+  "orchestration": { "mode": "adaptive", "liteMaxChildren": 1, "fullMaxChildren": 2, "liteMaxRevisions": 1, "fullMaxRevisions": 1, "reviewerMode": "risk-based", "legacyV07Compatibility": [] },
   "runtime": { "stateDirectory": ".qing/runs" },
   "modelRouting": { "mode": "inherit", "healthTtlMs": 3600000, "probeTimeoutMs": 30000, "candidates": [] },
   "security": { "approvedGateIds": [] }

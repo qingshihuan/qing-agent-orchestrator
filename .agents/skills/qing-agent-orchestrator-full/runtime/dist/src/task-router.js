@@ -196,6 +196,6 @@ export function createPendingDispatchHandoff(task, workspace, decision) {
         testPlan: operations.some(({ type }) => type === "execute_tests") ? ["Discover and run the project's relevant local test/build commands."] : [],
         maxIterations: Math.min(5, decision.orchestration.maxRevisions + 1),
         orchestration: createHandoffOrchestrationContract(decision.orchestration),
-        metadata: { createdAt: new Date().toISOString(), source: "qing-dispatch-local-envelope" },
+        metadata: { createdAt: new Date().toISOString(), source: "qing-dispatch-local-envelope", orchestrationPolicyVersion: "0.8" },
     };
 }
