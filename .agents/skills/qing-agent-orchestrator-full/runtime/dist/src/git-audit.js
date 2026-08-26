@@ -136,7 +136,8 @@ export async function captureGitSnapshot(cwd, runner = new NodeGitCommandRunner(
     const repositoryPaths = [...new Set([...tracked, ...repositoryEntries.flatMap((entry) => [entry.path, ...(entry.originalPath ? [entry.originalPath] : [])])])];
     const contentDigests = {};
     const workspacePath = (path) => normalizePath(relative(resolve(cwd), join(repositoryRoot, path)) || ".");
-    for (const path of repositoryPaths) {
+    const digestPaths = [...new Set(repositoryEntries.flatMap((entry) => [entry.path, ...(entry.originalPath ? [entry.originalPath] : [])]))];
+    for (const path of digestPaths) {
         const mapped = workspacePath(path);
         try {
             contentDigests[mapped] = createHash("sha256").update(await readFile(join(repositoryRoot, path))).digest("hex");
@@ -254,8 +255,16 @@ export function compareGitSnapshots(before, after, allowedPaths) {
     for (const path of allDigestPaths) {
         if (before.contentDigests[path] === after.contentDigests[path])
             continue;
-        if (!before.contentDigests[path])
-            introducedPaths.push(path);
+        if (!before.contentDigests[path]) {
+            const existedBefore = before.paths.some((candidate) => comparisonKey(candidate) === comparisonKey(path));
+            if (existedBefore) {
+                if (!changedExistingPaths.includes(path))
+                    changedExistingPaths.push(path);
+            }
+            else if (!introducedPaths.includes(path)) {
+                introducedPaths.push(path);
+            }
+        }
         else if (!changedExistingPaths.includes(path))
             changedExistingPaths.push(path);
     }

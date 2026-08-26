@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parseCodexModelCatalog, validateCandidateAgainstCatalog, type CodexModelCatalog } from "./codex-model-catalog.js";
 import { NodeProcessRunner, type ProcessRequest, type ProcessResult, type ProcessRunner } from "./process-runner.js";
 import { formatProcessDiagnostic, redactSensitiveText } from "./executors/codex-exec-executor.js";
@@ -32,6 +32,7 @@ export interface ModelHealthOptions {
   ephemeral?: boolean;
   ignoreUserConfig?: boolean;
   now?: () => number;
+  cachePath?: string;
 }
 
 function jsonlError(stdout: string): string | null {
@@ -90,6 +91,7 @@ export class ModelHealthChecker {
   private readonly pending = new Map<string, Promise<ModelHealthRecord>>();
   private versionPromise?: Promise<string>;
   private catalogPromise?: Promise<CodexModelCatalog>;
+  private persistentCacheLoaded = false;
 
   constructor(
     private readonly options: ModelHealthOptions,
@@ -100,6 +102,7 @@ export class ModelHealthChecker {
     if (!candidate.enabled) return this.unverified(candidate.id, "Candidate is disabled.");
     const capabilityError = validateModelCapability(candidate);
     if (candidate.backend !== "codex-cli" || capabilityError) return this.unverified(candidate.id, capabilityError ?? "Desktop child candidates are not probed through Codex CLI.");
+    await this.loadPersistentCache();
     const cliVersion = await this.cliVersion();
     const fingerprint = candidateFingerprint(candidate, cliVersion);
     const now = (this.options.now ?? Date.now)();
@@ -119,6 +122,46 @@ export class ModelHealthChecker {
     const now = (this.options.now ?? Date.now)();
     if (!latest.expiresAt || Date.parse(latest.expiresAt) <= now) return { ...latest, state: "expired", cacheState: "cached", reason: "Cached preflight has expired." };
     return { ...latest, cacheState: "cached" };
+  }
+
+  private async loadPersistentCache(): Promise<void> {
+    if (this.persistentCacheLoaded) return;
+    this.persistentCacheLoaded = true;
+    if (!this.options.cachePath) return;
+    try {
+      const parsed = JSON.parse(await readFile(this.options.cachePath, "utf8")) as { version?: unknown; records?: unknown };
+      if (parsed.version !== "1.0" || !Array.isArray(parsed.records)) return;
+      for (const value of parsed.records.slice(-128)) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const record = value as ModelHealthRecord;
+        if (typeof record.candidateId !== "string" || typeof record.fingerprint !== "string" || typeof record.reason !== "string") continue;
+        if (!record.fingerprint || !record.expiresAt || Number.isNaN(Date.parse(record.expiresAt))) continue;
+        this.cache.set(record.fingerprint, record);
+      }
+    } catch {
+      // A missing or malformed optimization cache never blocks execution.
+    }
+  }
+
+  private async persistCache(): Promise<void> {
+    if (!this.options.cachePath) return;
+    const target = this.options.cachePath;
+    const temporary = `${target}.${process.pid}.tmp`;
+    await mkdir(dirname(target), { recursive: true });
+    const records = [...this.cache.values()]
+      .sort((left, right) => String(left.checkedAt).localeCompare(String(right.checkedAt)))
+      .slice(-128);
+    try {
+      await writeFile(temporary, JSON.stringify({ version: "1.0", records }, null, 2) + "\n", "utf8");
+      await rename(temporary, target);
+    } finally {
+      await rm(temporary, { force: true }).catch(() => undefined);
+    }
+  }
+
+  private async storeRecord(record: ModelHealthRecord): Promise<void> {
+    this.cache.set(record.fingerprint, record);
+    await this.persistCache();
   }
 
   private unverified(candidateId: string, reason: string): ModelHealthRecord {
@@ -186,7 +229,7 @@ export class ModelHealthChecker {
           failure: "capability",
           reason: capabilityError,
         };
-        this.cache.set(fingerprint, record);
+        await this.storeRecord(record);
         return record;
       }
     } catch (error) {
@@ -250,7 +293,7 @@ export class ModelHealthChecker {
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }
-    this.cache.set(fingerprint, record!);
+    await this.storeRecord(record!);
     return record!;
   }
 }

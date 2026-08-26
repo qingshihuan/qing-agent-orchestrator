@@ -187,8 +187,8 @@ test("dispatch exposes Direct, Lite, Full-ready, and gated Full without silent e
     const liteOutput = JSON.parse(liteRun.stdout) as Record<string, unknown>;
     assert.equal(liteOutput.status, "LITE_EXECUTION_REQUIRED");
     const selected = liteOutput.modelSelection as Record<string, unknown>;
-    assert.equal(selected.complexityBand, "high-risk");
-    assert.equal(selected.model, "gpt-5.6-sol");
+    assert.equal(selected.complexityBand, "normal");
+    assert.equal(selected.model, "gpt-5.6-luna");
     assert.equal(selected.executionOwner, "Codex");
     assert.equal(liteOutput.reviewerModelSelection, null);
     const liteOrchestration = liteOutput.orchestration as { childAgentBudget: number; maxRevisions: number; parentVerification: boolean };
@@ -201,10 +201,10 @@ test("dispatch exposes Direct, Lite, Full-ready, and gated Full without silent e
       retryProtocol: { displayReplacementBeforeRetry: boolean; recordFallbackReason: boolean; reuseExistingGatesWhenScopeUnchanged: boolean };
     };
     const liteInvocation = liteOutput.delegationInvocation as DelegationInvocation;
-    assert.deepEqual(liteInvocation.spawnAgent, { model: "gpt-5.6-sol", reasoning_effort: "xhigh" });
+    assert.deepEqual(liteInvocation.spawnAgent, { model: "gpt-5.6-luna", reasoning_effort: "medium" });
     assert.equal(liteInvocation.executionOwner, "Codex");
     assert.equal(liteInvocation.parentModelUnchanged, true);
-    assert.deepEqual(liteInvocation.fallbackPlan.orderedCandidates.map(({ candidateId }) => candidateId), ["desktop-sol-complex", "desktop-terra-complex"]);
+    assert.deepEqual(liteInvocation.fallbackPlan.orderedCandidates.map(({ candidateId }) => candidateId), ["desktop-luna-normal", "desktop-terra-normal"]);
     assert.equal(liteInvocation.retryProtocol.displayReplacementBeforeRetry, true);
     assert.equal(liteInvocation.retryProtocol.recordFallbackReason, true);
     assert.equal(liteInvocation.retryProtocol.reuseExistingGatesWhenScopeUnchanged, true);

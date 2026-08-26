@@ -22,8 +22,68 @@ import { bindHandoffOrchestration, resolveExecutableOrchestrationLimits } from "
 import { validateExecutionResult, validateHandoff } from "./validation.js";
 import { resolveSafeWorkspace } from "./workspace.js";
 const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+let compactMode = false;
+function record(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function compactModel(value) {
+    const candidate = record(value);
+    if (!candidate || typeof candidate.model !== "string")
+        return null;
+    return {
+        model: candidate.model,
+        reasoningEffort: candidate.reasoningEffort ?? null,
+        role: candidate.role ?? null,
+        fallbackFrom: candidate.fallbackFrom ?? null,
+    };
+}
+function compactControlPlane(value) {
+    if (!compactMode)
+        return value;
+    const source = record(value);
+    if (!source || typeof source.status !== "string")
+        return value;
+    const supported = new Set([
+        "DIRECT_EXECUTION_REQUIRED",
+        "LITE_EXECUTION_REQUIRED",
+        "FULL_EXECUTION_READY",
+        "AWAITING_APPROVAL",
+        "DENIED",
+        "CLI_RECOMMENDATION_REQUIRED",
+        "CLI_SETUP_REQUIRED",
+    ]);
+    if (!supported.has(source.status))
+        return value;
+    const orchestration = record(source.orchestration);
+    const execution = record(source.execution);
+    const gate = record(source.safetyGate);
+    const decisions = Array.isArray(gate?.decisions) ? gate.decisions : [];
+    const gateIds = decisions.flatMap((item) => {
+        const decision = record(item);
+        return decision?.decision === "REQUIRE_APPROVAL" && typeof decision.gateId === "string" ? [decision.gateId] : [];
+    });
+    return {
+        status: source.status,
+        executionOwner: source.executionOwner ?? execution?.executionOwner ?? null,
+        route: source.route ?? null,
+        category: source.category ?? null,
+        tier: orchestration?.tier ?? null,
+        budget: orchestration ? {
+            children: orchestration.childAgentBudget ?? 0,
+            revisions: orchestration.maxRevisions ?? 0,
+            independentReviewer: orchestration.independentReviewer ?? false,
+        } : null,
+        model: compactModel(source.modelSelection),
+        reviewerModel: compactModel(source.reviewerModelSelection),
+        handoffId: source.handoffId ?? null,
+        approval: gate ? { outcome: gate.outcome ?? null, gateIds } : { outcome: "ALLOW", gateIds: [] },
+        modelProbe: source.modelProbe ?? null,
+        nextStep: source.nextStep ?? null,
+    };
+}
 function print(value) {
-    process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(compactControlPlane(value), null, compactMode ? 0 : 2)}
+`);
 }
 function flagValue(args, name) {
     const index = args.indexOf(name);
@@ -70,10 +130,11 @@ async function configuredModel(config, role, backend, task, decision) {
         return undefined;
     if (decision.route === "chat")
         throw new Error("Chat routing cannot select a Codex model.");
-    const complexity = analyzeTaskComplexity({ text: task, category: decision.category, role, routeSignals: decision.signals });
+    const analyzedComplexity = analyzeTaskComplexity({ text: task, category: decision.category, role, routeSignals: decision.signals });
+    const complexityBand = decision.orchestration.tier === "lite" ? "normal" : analyzedComplexity.band;
     if (backend === "desktop-child") {
         return {
-            selection: selectModelCandidate(config.modelRouting.candidates, new Map(), { backend, role, route: decision.route, category: decision.category, complexityBand: complexity.band }),
+            selection: selectModelCandidate(config.modelRouting.candidates, new Map(), { backend, role, route: decision.route, category: decision.category, complexityBand }),
             health: [],
         };
     }
@@ -85,11 +146,42 @@ async function configuredModel(config, role, backend, task, decision) {
         ttlMs: config.modelRouting.healthTtlMs,
         ephemeral: config.executor.codexExec.ephemeral,
         ignoreUserConfig: config.executor.codexExec.ignoreUserConfig,
+        cachePath: resolve(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory), "model-health-cache-v1.json"),
     });
-    const relevant = config.modelRouting.candidates.filter((candidate) => candidate.enabled && candidate.backend === "codex-cli" && candidate.roles.includes(role));
-    const health = await Promise.all(relevant.map((candidate) => checker.check(candidate)));
-    const byId = new Map(health.map((record) => [record.candidateId, record]));
-    return { selection: selectModelCandidate(config.modelRouting.candidates, byId, { backend, role, route: decision.route, category: decision.category, complexityBand: complexity.band }), health };
+    const relevant = config.modelRouting.candidates.filter((candidate) => candidate.enabled
+        && candidate.backend === "codex-cli"
+        && candidate.roles.includes(role)
+        && candidate.routes.includes(decision.route)
+        && candidate.complexityBands.includes(complexityBand)
+        && (candidate.categories.length === 0 || candidate.categories.includes(decision.category)));
+    const byCandidate = new Map(config.modelRouting.candidates.map((candidate) => [candidate.id, candidate]));
+    const fallbackIds = new Set(relevant.flatMap(({ fallbacks }) => fallbacks));
+    const primary = [...relevant]
+        .filter(({ id }) => !fallbackIds.has(id))
+        .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))[0]
+        ?? [...relevant].sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))[0];
+    if (!primary)
+        throw new Error(`No configured CLI candidate supports ${role}/${decision.route}/${decision.category}/${complexityBand}.`);
+    const health = [];
+    const queue = [primary];
+    const visited = new Set();
+    while (queue.length > 0) {
+        const candidate = queue.shift();
+        if (visited.has(candidate.id))
+            continue;
+        visited.add(candidate.id);
+        const observed = await checker.check(candidate);
+        health.push(observed);
+        if (observed.state === "healthy")
+            break;
+        for (const fallbackId of candidate.fallbacks) {
+            const fallback = byCandidate.get(fallbackId);
+            if (fallback && relevant.some(({ id }) => id === fallback.id))
+                queue.push(fallback);
+        }
+    }
+    const byId = new Map(health.map((observed) => [observed.candidateId, observed]));
+    return { selection: selectModelCandidate(config.modelRouting.candidates, byId, { backend, role, route: decision.route, category: decision.category, complexityBand }), health };
 }
 function desktopDelegationContract(selection) {
     return {
@@ -136,7 +228,7 @@ function usage() {
         "",
         "Commands:",
         "  doctor [--config <file>|--relay-config <file>]",
-        "  dispatch --task <goal> --workspace <project> [--edition standard|full] [--cli-response accept|decline] [--config <file>] [--no-model-probe]",
+        "  dispatch --task <goal> --workspace <project> [--edition standard|full] [--cli-response accept|decline] [--config <file>] [--no-model-probe] [--compact]",
         "       desktop is the default; a full-edition CLI condition first returns a recommendation and waits for a user choice",
         "  models list|probe [--config <file>]",
         "  status [run-id] [--config <file>]",
@@ -158,6 +250,7 @@ function usage() {
 }
 async function main() {
     const args = process.argv.slice(2);
+    compactMode = args.includes("--compact");
     const command = args[0];
     if (!command || command === "help" || command === "--help" || command === "-h") {
         process.stdout.write(`${usage()}\n`);
