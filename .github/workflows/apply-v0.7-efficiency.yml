@@ -55,6 +55,20 @@ jobs:
           if (-not $cliText.Contains($routeCurrent)) { throw "The generated route narrowing expression was not found." }
           $cliText = $cliText.Replace($routeCurrent, $routeReplacement)
           Set-Content -LiteralPath $cliPath -Value $cliText -Encoding utf8NoBOM -NoNewline
+
+          $testPath = "tests/task-router.test.ts"
+          $testText = Get-Content -LiteralPath $testPath -Raw
+          $replacements = @{
+            'assert.equal(selected.complexityBand, "high-risk");' = 'assert.equal(selected.complexityBand, "normal");'
+            'assert.equal(selected.model, "gpt-5.6-sol");' = 'assert.equal(selected.model, "gpt-5.6-luna");'
+            'assert.deepEqual(liteInvocation.spawnAgent, { model: "gpt-5.6-sol", reasoning_effort: "xhigh" });' = 'assert.deepEqual(liteInvocation.spawnAgent, { model: "gpt-5.6-luna", reasoning_effort: "medium" });'
+            '["desktop-sol-complex", "desktop-terra-complex"]' = '["desktop-luna-normal", "desktop-terra-normal"]'
+          }
+          foreach ($entry in $replacements.GetEnumerator()) {
+            if (-not $testText.Contains($entry.Key)) { throw "An obsolete Lite expectation was not found: $($entry.Key)" }
+            $testText = $testText.Replace($entry.Key, $entry.Value)
+          }
+          Set-Content -LiteralPath $testPath -Value $testText -Encoding utf8NoBOM -NoNewline
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - name: Run full tests
