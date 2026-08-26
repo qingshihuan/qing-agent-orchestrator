@@ -37,6 +37,16 @@ jobs:
           }
       - name: Apply source transformations
         run: python scripts/apply-v0.7-efficiency.py
+      - name: Repair the generated persistent-cache newline literal
+        shell: pwsh
+        run: |
+          $path = "src/model-health.ts"
+          $text = Get-Content -LiteralPath $path -Raw
+          $pattern = 'await writeFile\(temporary, JSON\.stringify\(\{ version: "1\.0", records \}, null, 2\) \+ "\s*", "utf8"\);'
+          $replacement = 'await writeFile(temporary, JSON.stringify({ version: "1.0", records }, null, 2) + "\n", "utf8");'
+          $fixed = [regex]::Replace($text, $pattern, $replacement, 1)
+          if ($fixed -eq $text) { throw "The generated model-health newline defect was not found." }
+          Set-Content -LiteralPath $path -Value $fixed -Encoding utf8NoBOM -NoNewline
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - name: Run full tests
