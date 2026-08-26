@@ -1,0 +1,2 @@
+# Keep the committed release checksum manifest byte-identical on every runner.
+artifacts/SHA256SUMS.txt text eol=lf
