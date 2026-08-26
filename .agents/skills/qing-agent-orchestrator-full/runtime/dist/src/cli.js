@@ -18,7 +18,7 @@ import { selectModelCandidate } from "./model-router.js";
 import { analyzeTaskComplexity } from "./task-analyzer.js";
 import { createPendingDispatchHandoff, routeTask } from "./task-router.js";
 import { respondToCliRecommendation } from "./execution-mode-router.js";
-import { bindHandoffOrchestration, resolveExecutableOrchestrationLimits } from "./orchestration-policy.js";
+import { bindHandoffOrchestration, legacyV07HandoffFingerprint, resolveExecutableOrchestrationLimits } from "./orchestration-policy.js";
 import { validateExecutionResult, validateHandoff } from "./validation.js";
 import { resolveSafeWorkspace } from "./workspace.js";
 const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -239,6 +239,8 @@ function usage() {
         "  execute <handoff.json> --allow-real-execution [--approve-handoff <handoff-id>] [--approve <gate-id>]... [--config <file>]",
         "       safe declared work needs no plan approval; effect gates still require their exact IDs",
         "  validate <handoff.json>",
+        "  legacy-fingerprint <handoff.json>",
+        "       prints the deterministic ID + SHA-256 entry required to opt in one authentic v0.7 3/2 Handoff",
         "  classify <task text>",
         "  gate <handoff.json> [--approve <gate-id>]...",
         "  review <handoff.json> <executor-result.json>",
@@ -463,6 +465,17 @@ async function main() {
         return;
     }
     const handoff = await readHandoff(handoffPath);
+    if (command === "legacy-fingerprint") {
+        print({
+            handoffId: handoff.id,
+            fingerprint: legacyV07HandoffFingerprint(handoff),
+            configEntry: {
+                id: handoff.id,
+                fingerprint: legacyV07HandoffFingerprint(handoff),
+            },
+        });
+        return;
+    }
     if (command === "execute") {
         const approvedHandoff = flagValue(args, "--approve-handoff");
         if (approvedHandoff !== undefined && approvedHandoff !== handoff.id)
@@ -487,6 +500,7 @@ async function main() {
             maxIterations: limits.maxIterations,
             approvedGateIds: approvals,
             runHandle,
+            orchestrationConfig: config.orchestration,
         });
         const finalModelSelection = executor instanceof CodexExecExecutor
             ? executor.finalModelSelection ?? bundle?.selection ?? null
@@ -531,6 +545,7 @@ async function main() {
             maxIterations: limits.maxIterations,
             approvedGateIds: approvals,
             runHandle,
+            orchestrationConfig: config.orchestration,
         });
         print({ ...result, orchestration: limits.contract, executionBudgetSource: limits.source, maxIterationsBudget: limits.maxIterations });
         if (!["COMPLETED", "SIMULATED_COMPLETED"].includes(result.status))

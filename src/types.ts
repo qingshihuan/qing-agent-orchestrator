@@ -15,6 +15,14 @@ export type TaskRoute = "chat" | "codex" | "hybrid";
 export type ExecutionOwner = "ChatGPT" | "Codex";
 export type OrchestratorEdition = "standard" | "full";
 export type OrchestrationTier = "direct" | "lite" | "full";
+export type OrchestrationMilestone =
+  | "new-user-turn"
+  | "before-child-creation"
+  | "before-child-reactivation"
+  | "before-revision"
+  | "before-review";
+export type ChildCoordinationState = "not-started" | "running" | "completed" | "failed" | "cancelled" | "timed-out";
+export type IndependentReviewVerdict = "PASS" | "REVISE" | "HUMAN_REVIEW";
 export type OrchestrationMode = "adaptive" | "full";
 export type ReviewerMode = "risk-based";
 export type DelegationTarget = "outer-session" | "internal-child" | "visible-task";
@@ -66,6 +74,15 @@ export interface OrchestrationConfig {
   liteMaxRevisions: 1;
   fullMaxRevisions: number;
   reviewerMode: ReviewerMode;
+  /** Runtime provenance: only loadConfig marks omitted Full budgets as defaults. */
+  fullBudgetSource?: "default" | "explicit";
+  /** Content-bound compatibility selection for exact v0.7 Full 3/2 Handoffs. */
+  legacyV07Compatibility?: LegacyV07CompatibilityEntry[];
+}
+
+export interface LegacyV07CompatibilityEntry {
+  id: string;
+  fingerprint: string;
 }
 
 export interface OrchestrationDecision {
@@ -77,6 +94,44 @@ export interface OrchestrationDecision {
   modelSelectionRequired: boolean;
   approvalPolicy: "effects-only";
   decomposable: boolean;
+  reasons: string[];
+}
+
+/**
+ * Mutable per-task facts that survive a temporary tier downgrade.  This is
+ * intentionally separate from a persisted Handoff: a Handoff records the
+ * maximum safe contract, while this state describes only the remaining phase.
+ */
+export interface PhaseOrchestrationState {
+  previousTier: OrchestrationTier;
+  pendingIndependentReview: boolean;
+  unacceptedHighRiskArtifact: boolean;
+}
+
+export interface PhaseReclassificationDecision {
+  milestone: OrchestrationMilestone;
+  decision: OrchestrationDecision;
+  state: PhaseOrchestrationState;
+  reclassified: boolean;
+  restoredForIndependentReview: boolean;
+}
+
+export interface ChildCoordinationInput {
+  state: ChildCoordinationState;
+  observedNewEvent: boolean;
+  noProgressTimeoutReached: boolean;
+}
+
+export interface ChildCoordinationSnapshot {
+  state: ChildCoordinationState;
+  recoveryAttempts: number;
+  takeoverDecisions: number;
+}
+
+export interface ChildCoordinationDecision {
+  action: "start" | "wait-for-event" | "collect-result" | "make-one-takeover-decision" | "recover-once" | "do-not-reactivate";
+  pollNow: false;
+  maxUnchangedWaits: 1;
   reasons: string[];
 }
 
@@ -292,6 +347,8 @@ export interface Handoff {
   metadata?: {
     createdAt?: string;
     source?: string;
+    /** Written by v0.8+ Handoff producers; absent contracts may use narrow v0.7 budget compatibility. */
+    orchestrationPolicyVersion?: "0.8";
   };
 }
 

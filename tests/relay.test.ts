@@ -9,8 +9,9 @@ import { DryRunExecutor } from "../src/executors/dry-run-executor.js";
 import { MockExecutor } from "../src/executors/mock-executor.js";
 import { Relay } from "../src/relay.js";
 import { RuleBasedReviewer } from "../src/reviewer.js";
+import type { Reviewer } from "../src/reviewer.js";
 import { RunStore } from "../src/run-store.js";
-import type { ExecutionResult, Handoff } from "../src/types.js";
+import type { ExecutionResult, Handoff, Review } from "../src/types.js";
 import type { ExecutionContext, Executor } from "../src/executors/executor.js";
 import type { ProcessRequest, ProcessResult, ProcessRunner } from "../src/process-runner.js";
 import { validateHandoff } from "../src/validation.js";
@@ -36,6 +37,72 @@ test("dry-run evidence never becomes a completed task", async () => {
   assert.equal(result.status, "MAX_ITERATIONS");
   assert.equal(result.attempts.length, 2);
   assert.ok(result.attempts.every((attempt) => attempt.review.verdict === "REVISE"));
+});
+
+test("Relay persists reachable phase reclassification and retains the review obligation through REVISE", async () => {
+  const handoff = await exampleHandoff();
+  handoff.maxIterations = 2;
+  const result = await new Relay(new MockExecutor(), new RuleBasedReviewer()).run(handoff, {
+    maxIterations: 2,
+    approvedGateIds: [],
+  });
+  assert.equal(result.status, "MAX_ITERATIONS");
+  assert.ok(result.phaseDecisions.some(({ milestone, tier }) => milestone === "before-child-creation" && tier === "direct"));
+  const reviews = result.phaseDecisions.filter(({ milestone }) => milestone === "before-review");
+  assert.equal(reviews.length, 2);
+  assert.ok(reviews.every(({ tier, pendingIndependentReview }) => tier === "full" && pendingIndependentReview));
+});
+
+class CountingExecutor implements Executor {
+  readonly name = "counting";
+  calls = 0;
+  constructor(readonly proposedOperations: ExecutionResult["proposedOperations"] = []) {}
+  async execute(handoff: Handoff): Promise<ExecutionResult> {
+    this.calls += 1;
+    return {
+      status: "succeeded", summary: "counting fixture", artifacts: handoff.deliverables,
+      criteriaEvidence: handoff.acceptanceCriteria.map((criterion) => ({ id: criterion.id, status: "pass" as const, evidence: "fixture" })),
+      tests: handoff.testPlan.map((command) => ({ command, status: "passed" as const, evidence: "fixture" })),
+      proposedOperations: this.proposedOperations, simulated: false,
+    };
+  }
+}
+
+class CountingReviewer implements Reviewer {
+  calls = 0;
+  async review(): Promise<Review> {
+    this.calls += 1;
+    throw new Error("Reviewer must not run for an enforced Direct or Lite phase.");
+  }
+}
+
+test("v0.8 enforced Direct and Lite phases change Relay control flow and child invocation counts", async () => {
+  const directHandoff = await exampleHandoff();
+  directHandoff.metadata = { ...directHandoff.metadata, orchestrationPolicyVersion: "0.8" };
+  directHandoff.objective = "汇总当前已冻结的本地证据";
+  const directExecutor = new CountingExecutor();
+  const directReviewer = new CountingReviewer();
+  const direct = await new Relay(directExecutor, directReviewer).run(directHandoff, { maxIterations: 1, approvedGateIds: [] });
+  assert.equal(direct.status, "PARENT_ACTION_REQUIRED");
+  assert.equal(directExecutor.calls, 0);
+  assert.equal(directReviewer.calls, 0);
+  assert.match(direct.message, /parent must complete and verify/i);
+
+  const liteHandoff = await exampleHandoff();
+  liteHandoff.metadata = { ...liteHandoff.metadata, orchestrationPolicyVersion: "0.8" };
+  liteHandoff.objective = "先规划接口，然后实现并测试剩余的本地修复";
+  const liteExecutor = new CountingExecutor([{ type: "read", target: "src/game-visual-analyzer/fixture.ts", reason: "Verify a local fixture before parent acceptance.", risk: "low" }]);
+  const liteReviewer = new CountingReviewer();
+  const lite = await new Relay(liteExecutor, liteReviewer).run(liteHandoff, { maxIterations: 1, approvedGateIds: [] });
+  assert.equal(lite.status, "PARENT_VERIFICATION_REQUIRED");
+  assert.equal(liteExecutor.calls, 1);
+  assert.equal(liteReviewer.calls, 0);
+  assert.equal(lite.attempts.length, 0);
+  assert.equal(lite.pendingParentVerification?.reviewerInvoked, false);
+  assert.equal(lite.pendingParentVerification?.execution.summary, "counting fixture");
+  assert.deepEqual(lite.pendingParentVerification?.execution.proposedOperations, liteExecutor.proposedOperations);
+  assert.equal(lite.pendingParentVerification?.postExecutionGate?.outcome, "ALLOW");
+  assert.match(lite.message, /parent must verify/i);
 });
 
 test("Relay persists sandbox runtime provenance and terminal evidence", async () => {

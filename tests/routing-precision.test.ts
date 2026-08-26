@@ -74,7 +74,7 @@ test("the routing benchmark restores the intended Direct Lite Full budget", () =
   }
 
   assert.deepEqual(counts, { direct: 9, lite: 1, full: 5 });
-  assert.equal(childBudget, 16);
+  assert.equal(childBudget, 11);
   assert.equal(reviewerCount, 5);
   assert.equal(modelSelectionCount, 6);
 });

@@ -1,6 +1,6 @@
 # Qing-Agent-Orchestrator
 
-[简体中文](README.md) · [v0.6.0 release notes](docs/release-notes-v0.6.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+[简体中文](README.md) · [v0.8.0 release notes](docs/release-notes-v0.8.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 **Let the model that understands, plans, and communicates well clarify the work; let Codex handle code and engineering execution.**
 
@@ -27,6 +27,15 @@ Complexity is an explainable score rather than a fast/complex toggle. It helps d
 Every candidate is bound to `desktop-child` or `codex-cli`. Desktop candidates continue to use the capability snapshot advertised by the host. An internal child receives `{ model, reasoning_effort }`; explicit values affect only the delegated backend and never change the parent model. The CLI receives `-m` and `model_reasoning_effort`. Configuration may express `minimal|low|medium|high|xhigh|max|ultra`, but the installed `codex debug models --bundled` catalog is authoritative for model slugs, reasoning levels, and minimum client versions. A CLI candidate must also pass a bounded, read-only, structured account-entitlement probe, so a catalog-valid but account-unavailable pair never becomes healthy.
 
 Availability is a current host/runtime snapshot and can drift with version, account, or entitlement. Ordinary and high-risk work both use a completion-first policy: CLI candidates must pass the existing health probe, while a rejected desktop spawn may continue only along the internal explicit, capability-valid, same-backend fallback chain. Exhaustion fails closed and never selects an unrelated candidate. Fallback candidates are not shown in advance; only after a replacement is actually used does the result disclose `executionOwner: Codex`, rejected/actual pairs, reason, chain, attempts, and complete scope proof. A real CLI invocation retries only when the error explicitly names the selected model ID and says that model is unknown, unsupported by the account/entitlement, missing metadata, or unavailable. Authentication, process, timeout, cancellation, output-limit, protocol, model-output-schema, and ordinary failures are not retried. Missing or incomplete scope proof requires a new gate. ChatGPT/Codex subscription access is not Responses API entitlement; this project has no provider URL, token, or API adapter.
+
+## v0.8.0 release highlights
+
+- **Phase reclassification:** every new user turn and delegation milestone evaluates only the remaining work, so Full can de-escalate to Lite or Direct.
+- **Review obligations survive:** an unaccepted high-risk artifact restores independent review only at final acceptance, even if an intermediate phase is lower tier.
+- **Lower coordination overhead:** unchanged children wait for events; a real stall permits one takeover/replacement decision rather than repeated polling or interrupt/reactivate loops.
+- **Tighter defaults:** adaptive Full defaults to two children and one revision, while explicit bounded configuration can still raise those limits.
+- **Auditable Lite result:** `PARENT_VERIFICATION_REQUIRED` carries the actual Executor evidence and any post-execution gate, but never fabricates a Reviewer verdict.
+- **Content-bound legacy migration:** v0.7 `3/2` requires an exact `{ id, fingerprint }` migration entry, so a new Handoff cannot reuse an old ID.
 
 ## v0.6.0 highlights
 
@@ -141,10 +150,10 @@ npm run typecheck
 npm test
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .agents/skills/qing-agent-orchestrator-full
-powershell -NoProfile -File scripts/package-skill-editions.ps1 -Validate
+pwsh -NoProfile -File scripts/package-skill-editions.ps1 -Validate
 ```
 
-The packaging script writes the final ZIPs before generating `artifacts/SHA256SUMS.txt`. `-Validate` requires exactly both archive names and recomputes their hashes, then compares the full edition's exact inventory and every file SHA-256 with the declared skill sources, `dist/src`, schemas, and generated runtime config/package. File counts are not used as a content proxy.
+Packaging requires the same **PowerShell Core 7.6.x (`pwsh`)** runtime as the release workflow. Windows PowerShell 5.1 is explicitly rejected so it cannot produce content-equivalent but byte-different ZIPs that CI would fail to rebuild. The packaging script writes the final ZIPs before generating `artifacts/SHA256SUMS.txt`. `-Validate` requires exactly both archive names and recomputes their hashes, then compares the full edition's exact inventory and every file SHA-256 with the declared skill sources, `dist/src`, schemas, and generated runtime config/package. File counts are not used as a content proxy.
 
 Read [CHANGELOG](CHANGELOG.md), [CONTRIBUTING](CONTRIBUTING.md), and [SECURITY](SECURITY.md) before contributing.
 

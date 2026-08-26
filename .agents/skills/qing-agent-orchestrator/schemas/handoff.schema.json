@@ -100,7 +100,8 @@
       "additionalProperties": false,
       "properties": {
         "createdAt": { "type": "string", "format": "date-time" },
-        "source": { "type": "string" }
+        "source": { "type": "string" },
+        "orchestrationPolicyVersion": { "const": "0.8" }
       }
     }
   },
