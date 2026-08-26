@@ -37,16 +37,24 @@ jobs:
           }
       - name: Apply source transformations
         run: python scripts/apply-v0.7-efficiency.py
-      - name: Repair the generated persistent-cache newline literal
+      - name: Repair generated TypeScript compatibility defects
         shell: pwsh
         run: |
-          $path = "src/model-health.ts"
-          $text = Get-Content -LiteralPath $path -Raw
-          $pattern = 'await writeFile\(temporary, JSON\.stringify\(\{ version: "1\.0", records \}, null, 2\) \+ "\s*", "utf8"\);'
-          $replacement = 'await writeFile(temporary, JSON.stringify({ version: "1.0", records }, null, 2) + "\n", "utf8");'
-          $fixed = [regex]::Replace($text, $pattern, $replacement, 1)
-          if ($fixed -eq $text) { throw "The generated model-health newline defect was not found." }
-          Set-Content -LiteralPath $path -Value $fixed -Encoding utf8NoBOM -NoNewline
+          $healthPath = "src/model-health.ts"
+          $healthText = Get-Content -LiteralPath $healthPath -Raw
+          $newlinePattern = 'await writeFile\(temporary, JSON\.stringify\(\{ version: "1\.0", records \}, null, 2\) \+ "\s*", "utf8"\);'
+          $newlineReplacement = 'await writeFile(temporary, JSON.stringify({ version: "1.0", records }, null, 2) + "\n", "utf8");'
+          $fixedHealth = [regex]::Replace($healthText, $newlinePattern, $newlineReplacement, 1)
+          if ($fixedHealth -eq $healthText) { throw "The generated model-health newline defect was not found." }
+          Set-Content -LiteralPath $healthPath -Value $fixedHealth -Encoding utf8NoBOM -NoNewline
+
+          $cliPath = "src/cli.ts"
+          $cliText = Get-Content -LiteralPath $cliPath -Raw
+          $routeCurrent = 'candidate.routes.includes(decision.route)'
+          $routeReplacement = 'candidate.routes.includes(decision.route as "codex" | "hybrid")'
+          if (-not $cliText.Contains($routeCurrent)) { throw "The generated route narrowing expression was not found." }
+          $cliText = $cliText.Replace($routeCurrent, $routeReplacement)
+          Set-Content -LiteralPath $cliPath -Value $cliText -Encoding utf8NoBOM -NoNewline
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - name: Run full tests
