@@ -35,3 +35,6 @@ Expose only high-level ownership: `ChatGPT` for outer-parent work and `Codex` fo
 - `DENIED`: contract must be corrected; approval cannot override it.
 
 New permissions, paths, external effects, or material scope return only the affected portion to gating.
+
+## v0.9 context and model policy
+Load only the reference sections required by the current phase. Give a child a bounded objective, relevant paths, acceptance criteria and the unchanged safety contract, not the full conversation. Preserve required verification and independent review. Astra (`gpt-6-astra`) is an opt-in demanding-work candidate, not a blanket upgrade. A recognized model name is not proof of the current host's exact model/effort availability; confirm that pair before delegation. Do not infer desktop access from a public API model listing. Existing normal-task choices remain unchanged.

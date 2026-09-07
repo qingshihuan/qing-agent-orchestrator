@@ -88,3 +88,7 @@ Executor 返回后，声明的 testPlan 由 Relay 父进程独立执行并绑定
 - GitHub 发布。
 
 旧适配器的历史 connected 结果不能替代当前产物的部署和 E2E。
+
+## v0.9 low-overhead operation
+Prefer `--compact` for agent-facing dispatch/start. Use `models probe --candidate cli-astra-demanding` only after enabling/configuring that candidate; health checks reuse the shared persistent cache. `--force` refreshes health explicitly, not on every task. Astra requires CLI 0.153.0 or newer, a matching local catalog and successful account preflight. No installation or login is performed automatically.
+`logs <run-id> --after 0 --limit 20 --compact` returns `{events,nextAfter,hasMore}`. Continue with nextAfter only when more evidence is needed; never mistake a partial page for the full journal. Without page flags the legacy full array remains available. Both ZIPs have updated instruction contracts; back up customized configuration before installing.

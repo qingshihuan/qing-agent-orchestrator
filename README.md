@@ -1,6 +1,10 @@
 # 青-Agent-Orchestrator
 
-[English](README.en.md) · [v0.8.1 发布说明](docs/release-notes-v0.8.1.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
+## v0.9.0 提速降耗与 Astra
+
+Astra 按需启用而非全局默认；紧凑执行上下文、分层读取规则、定向缓存预检和增量日志减少重复工作。完整验收和效果审批不变。 See [v0.9.0](docs/release-notes-v0.9.0.md).
+
+[English](README.en.md) · [v0.9.0 发布说明](docs/release-notes-v0.9.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
 **让擅长理解、规划和沟通的模型先把事情想清楚，让擅长代码与工程执行的 Codex 完成实现与验证。**
 
@@ -30,7 +34,7 @@
 
 ## v0.8.1 维护更新
 
-本次发布修复完整版的模型健康缓存并发、状态误复用、跨块中文/emoji 输出和重复进程取消，减少无效探针及任务结束后的缓冲保留。完整版运行时与安装 ZIP 已同步；标准版内容、模型候选、编排预算和效果审批规则不变。详见 [v0.8.1 发布说明](docs/release-notes-v0.8.1.md)。
+本次发布修复完整版的模型健康缓存并发、状态误复用、跨块中文/emoji 输出和重复进程取消，减少无效探针及任务结束后的缓冲保留。完整版运行时与安装 ZIP 已同步；标准版内容、模型候选、编排预算和效果审批规则不变。详见 [v0.9.0 发布说明](docs/release-notes-v0.9.0.md)。
 
 ## v0.8.0 发布重点
 

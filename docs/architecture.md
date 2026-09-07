@@ -77,3 +77,6 @@ Direct 默认把安全单一范围工作留在父任务。Lite/Full 子任务仍
 工作区 sandbox 不等于 allowedPaths 子目录沙箱。Relay 还需要安全闸门、提示合同、Git 快照和 Reviewer 审计。非 Git 或审计不确定状态不能被自动判 PASS。
 
 heartbeat 仅表达 Relay 尚未观察到退出。测试真值来自 Relay 父进程按 Handoff testPlan 执行并绑定的证据，不来自 Executor 自述或 JSONL 命令日志。
+
+## v0.9 Astra and efficiency
+The desktop configuration table additionally recognizes gpt-6-astra with low/medium/high/xhigh/max, but does not prove the live host advertises any of those pairs. Astra example candidates are disabled until explicitly configured for demanding work. CLI requires at least 0.153.0 plus the current catalog and account health checks; a higher catalog floor wins. Compact JSON changes serialization only, not the executable Handoff. Incremental log pages preserve complete journal evidence and disclose hasMore; unpaged commands remain compatible. See release-notes-v0.9.0.md.

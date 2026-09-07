@@ -40,7 +40,10 @@ export class ModelFallbackRequiresGateError extends Error {
   }
 }
 
+// Recognized configuration pairs are not proof of this host/account's access.
+// Astra is opt-in; enable only after the host advertises the exact pair.
 const desktopCapabilities: Readonly<Record<string, readonly ModelReasoningEffort[]>> = {
+  "gpt-6-astra": ["low", "medium", "high", "xhigh", "max"],
   "gpt-5.6-sol": ["low", "medium", "high", "xhigh", "max", "ultra"],
   "gpt-5.6-terra": ["low", "medium", "high", "xhigh", "max", "ultra"],
   "gpt-5.6-luna": ["low", "medium", "high", "xhigh", "max"],
