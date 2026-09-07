@@ -41,9 +41,14 @@ jobs:
           assert hashlib.sha256(data).hexdigest() == '8d69fee4ce38a50bb5ba26a399ca3fb336b72ba5a7c1d3dd544d025416ffc80f', 'Patch checksum mismatch'
           subprocess.run(['git', 'apply', '--check', '-'], input=data, check=True)
           subprocess.run(['git', 'apply', '-'], input=data, check=True)
+          health = pathlib.Path('src/model-health.ts')
+          text = health.read_text(encoding='utf-8')
+          text = text.replace('private versionPromise?: Promise<string>;', 'private versionPromise: Promise<string> | undefined;')
+          text = text.replace('private catalogPromise?: Promise<CodexModelCatalog>;', 'private catalogPromise: Promise<CodexModelCatalog> | undefined;')
+          health.write_bytes(text.encode('utf-8'))
           expected = {
               'src/process-runner.ts': 'd5b266f760582b5b6cf7f952bf678ebf466d9523',
-              'src/model-health.ts': '62a6fc8605d1a6439bb264f389c07d9d98aa9885',
+              'src/model-health.ts': '4113d24e2bd38b423ee8350b24fccebf987ee9d5',
               'tests/process-runner.test.ts': '2b220967bc8e77808f4b38252c30cdbf4942151f',
               'tests/model-health-persistent.test.ts': 'bb89459a07732de34f7bc30bfe48919c292b4e1d',
           }
