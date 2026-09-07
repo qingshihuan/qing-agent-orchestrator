@@ -95,12 +95,26 @@ export function parseCodexModelCatalog(value: string): CodexModelCatalog {
   return { models };
 }
 
+// Published compatibility floor; the local catalog may require a newer build.
+// https://help.openai.com/en/articles/20001275
+export function validateKnownModelMinimum(model: string, cliVersion: string): string | null {
+  if (model !== "gpt-6-astra") return null;
+  const actual = parseVersion(cliVersion);
+  const minimum = parseVersion("0.153.0")!;
+  if (!actual || compareVersions(actual, minimum) < 0) {
+    return "Model 'gpt-6-astra' requires Codex CLI 0.153.0 or newer; installed version is " + cliVersion + ".";
+  }
+  return null;
+}
+
 export function validateCandidateAgainstCatalog(
   candidate: Pick<ModelCandidate, "backend" | "model" | "reasoningEffort">,
   catalog: CodexModelCatalog,
   cliVersion: string,
 ): string | null {
   if (candidate.backend !== "codex-cli") return "Only Codex CLI candidates can be checked against the Codex model catalog.";
+  const knownMinimum = validateKnownModelMinimum(candidate.model, cliVersion);
+  if (knownMinimum) return knownMinimum;
   const entry = catalog.models.get(candidate.model);
   if (!entry) return `Model '${candidate.model}' is absent from this Codex CLI bundled model catalog.`;
   if (!entry.supportedReasoningEfforts.includes(candidate.reasoningEffort)) {

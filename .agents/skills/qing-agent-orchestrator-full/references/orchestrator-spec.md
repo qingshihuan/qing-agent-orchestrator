@@ -19,3 +19,6 @@ Persist Full tier/child/revision budgets in the Handoff. Runtime validation reje
 Expose `ChatGPT` for outer-parent ownership and `Codex` for delegated execution. Select child models only after delegation is justified and keep the parent unchanged internally. Retain the explicit same-backend fallback chain for execution safety, but disclose it only when a substitution actually occurs.
 
 Stable states are `DIRECT_EXECUTION_REQUIRED`, `LITE_EXECUTION_REQUIRED`, `FULL_EXECUTION_READY`, `AWAITING_APPROVAL`, and `DENIED`. Approval applies to consequential effects, not to the existence of a plan or Handoff.
+
+## v0.9 context and model policy
+Load only the reference sections required by the current phase. Give a child a bounded objective, relevant paths, acceptance criteria and the unchanged safety contract, not the full conversation. Preserve required verification and independent review. Astra (`gpt-6-astra`) is an opt-in demanding-work candidate, not a blanket upgrade. A recognized model name is not proof of the current host's exact model/effort availability; confirm that pair before delegation. Do not infer desktop access from a public API model listing. Existing normal-task choices remain unchanged.

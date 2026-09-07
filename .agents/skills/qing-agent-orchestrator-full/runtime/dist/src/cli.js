@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyTask } from "./classifier.js";
+import { logPageOptions, optionalFlag, selectEventPage } from "./output-efficiency.js";
 import { loadConfig } from "./config.js";
 import { DryRunExecutor } from "./executors/dry-run-executor.js";
 import { CodexExecExecutor } from "./executors/codex-exec-executor.js";
@@ -31,6 +32,9 @@ function compactModel(value) {
     if (!candidate || typeof candidate.model !== "string")
         return null;
     return {
+        candidateId: candidate.candidateId ?? null,
+        backend: candidate.backend ?? null,
+        profile: candidate.profile ?? null,
         model: candidate.model,
         reasoningEffort: candidate.reasoningEffort ?? null,
         role: candidate.role ?? null,
@@ -76,7 +80,10 @@ function compactControlPlane(value) {
         model: compactModel(source.modelSelection),
         reviewerModel: compactModel(source.reviewerModelSelection),
         handoffId: source.handoffId ?? null,
-        approval: gate ? { outcome: gate.outcome ?? null, gateIds } : { outcome: "ALLOW", gateIds: [] },
+        handoffPath: source.handoffPath ?? null,
+        plannerSource: source.plannerSource ?? null,
+        plannerWarning: source.plannerWarning ?? null,
+        approval: gate ? { outcome: gate.outcome ?? null, gateIds, decisions: decisions.filter((item) => record(item)?.decision !== "ALLOW") } : { outcome: "ALLOW", gateIds: [], decisions: [] },
         modelProbe: source.modelProbe ?? null,
         nextStep: source.nextStep ?? null,
     };
@@ -248,6 +255,9 @@ function usage() {
         "       legacy convenience command; real codex-exec is refused (use execute)",
         "",
         "doctor only checks CLI availability/authentication. It does not submit a task.",
+        "Use --compact for agent-facing output; full output remains the compatibility default.",
+        "models probe [--candidate <id>] [--force]: cached by default; force refreshes health.",
+        "logs <run-id> [--after <sequence>] [--limit <1..500>]: returns events/nextAfter/hasMore; no flags retains the full array.",
     ].join("\n");
 }
 async function main() {
@@ -274,9 +284,15 @@ async function main() {
             print({ mode: config.modelRouting.mode, healthTtlMs: config.modelRouting.healthTtlMs, candidates: config.modelRouting.candidates.map((candidate) => ({ ...candidate, health: candidate.enabled ? "unverified" : "disabled" })) });
             return;
         }
-        const checker = new ModelHealthChecker({ command: config.executor.codexExec.command, cwd: runtimeRoot, schemaPath: resolve(runtimeRoot, "schemas/model-health.schema.json"), timeoutMs: config.modelRouting.probeTimeoutMs, ttlMs: config.modelRouting.healthTtlMs, ephemeral: config.executor.codexExec.ephemeral, ignoreUserConfig: config.executor.codexExec.ignoreUserConfig });
-        const cliCandidates = config.modelRouting.candidates.filter(({ backend }) => backend === "codex-cli");
-        print({ mode: config.modelRouting.mode, backend: "codex-cli", results: await Promise.all(cliCandidates.map((candidate) => checker.check(candidate))) });
+        const requestedCandidate = optionalFlag(args, "--candidate");
+        if (requestedCandidate !== undefined && !config.modelRouting.candidates.some((item) => item.id === requestedCandidate && item.backend === "codex-cli")) {
+            throw new Error("--candidate must name a configured Codex CLI candidate.");
+        }
+        const checker = new ModelHealthChecker({ command: config.executor.codexExec.command, cwd: runtimeRoot, schemaPath: resolve(runtimeRoot, "schemas/model-health.schema.json"), timeoutMs: config.modelRouting.probeTimeoutMs, ttlMs: config.modelRouting.healthTtlMs, ephemeral: config.executor.codexExec.ephemeral, ignoreUserConfig: config.executor.codexExec.ignoreUserConfig,
+            cachePath: resolve(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory), "model-health-cache-v1.json"),
+        });
+        const cliCandidates = config.modelRouting.candidates.filter(({ id, backend }) => backend === "codex-cli" && (requestedCandidate === undefined || id === requestedCandidate));
+        print({ mode: config.modelRouting.mode, backend: "codex-cli", results: await Promise.all(cliCandidates.map((candidate) => checker.check(candidate, args.includes("--force")))) });
         return;
     }
     if (command === "dispatch") {
@@ -380,7 +396,9 @@ async function main() {
         if (!runId)
             throw new Error(`${command} requires a run ID`);
         if (command === "logs") {
-            print(await store.readEvents(runId));
+            const page = logPageOptions(args);
+            const events = await store.readEvents(runId);
+            print(page ? selectEventPage(events, page) : events);
             return;
         }
         print(await store.cancelRun(runId, terminateProcessTree));

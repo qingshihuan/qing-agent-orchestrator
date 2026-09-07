@@ -1,6 +1,10 @@
 # Qing-Agent-Orchestrator
 
-[简体中文](README.md) · [v0.8.1 release notes](docs/release-notes-v0.8.1.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+## v0.9.0 Astra and context efficiency
+
+Opt-in Astra, lossless compact context, conditional references, targeted cached probes and incremental logs reduce redundant work without weakening evidence or effect gates. See [v0.9.0](docs/release-notes-v0.9.0.md).
+
+[简体中文](README.md) · [v0.9.0 release notes](docs/release-notes-v0.9.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 **Let the model that understands, plans, and communicates well clarify the work; let Codex handle code and engineering execution.**
 
@@ -30,7 +34,7 @@ Availability is a current host/runtime snapshot and can drift with version, acco
 
 ## v0.8.1 maintenance update
 
-This release fixes concurrent health-cache initialization, stale candidate status, split UTF-8 output, and repeated process cancellation in the full runtime. It avoids redundant probes and releases completed output buffers. The bundled runtime and full ZIP are synchronized; standard-edition content, model choices, orchestration budgets, and effect gates are unchanged. See the [v0.8.1 release notes](docs/release-notes-v0.8.1.md).
+This release fixes concurrent health-cache initialization, stale candidate status, split UTF-8 output, and repeated process cancellation in the full runtime. It avoids redundant probes and releases completed output buffers. The bundled runtime and full ZIP are synchronized; standard-edition content, model choices, orchestration budgets, and effect gates are unchanged. See the [v0.9.0 release notes](docs/release-notes-v0.9.0.md).
 
 ## v0.8.0 release highlights
 

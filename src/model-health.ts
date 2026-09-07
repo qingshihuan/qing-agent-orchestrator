@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { parseCodexModelCatalog, validateCandidateAgainstCatalog, type CodexModelCatalog } from "./codex-model-catalog.js";
+import { parseCodexModelCatalog, validateCandidateAgainstCatalog, validateKnownModelMinimum, type CodexModelCatalog } from "./codex-model-catalog.js";
 import { NodeProcessRunner, type ProcessRequest, type ProcessResult, type ProcessRunner } from "./process-runner.js";
 import { formatProcessDiagnostic, redactSensitiveText } from "./executors/codex-exec-executor.js";
 import { validateModelCapability } from "./model-router.js";
@@ -99,16 +99,18 @@ export class ModelHealthChecker {
     private readonly runner: ProcessRunner = new NodeProcessRunner(),
   ) {}
 
-  async check(candidate: ModelCandidate): Promise<ModelHealthRecord> {
+  async check(candidate: ModelCandidate, force = false): Promise<ModelHealthRecord> {
     if (!candidate.enabled) return this.unverified(candidate.id, "Candidate is disabled.");
     const capabilityError = validateModelCapability(candidate);
     if (candidate.backend !== "codex-cli" || capabilityError) return this.unverified(candidate.id, capabilityError ?? "Desktop child candidates are not probed through Codex CLI.");
     await this.loadPersistentCache();
     const cliVersion = await this.cliVersion();
+    const knownMinimum = validateKnownModelMinimum(candidate.model, cliVersion);
+    if (knownMinimum) return this.unverified(candidate.id, knownMinimum);
     const fingerprint = candidateFingerprint(candidate, cliVersion);
     const now = (this.options.now ?? Date.now)();
     const cached = this.cache.get(fingerprint);
-    if (cached?.expiresAt && Date.parse(cached.expiresAt) > now) return { ...cached, candidateId: candidate.id, cacheState: "cached" };
+    if (!force && cached?.expiresAt && Date.parse(cached.expiresAt) > now) return { ...cached, candidateId: candidate.id, cacheState: "cached" };
     const current = this.pending.get(fingerprint);
     if (current) return { ...(await current), candidateId: candidate.id, cacheState: "cached" };
     const task = this.validateCatalogThenProbe(candidate, cliVersion, fingerprint, now).finally(() => this.pending.delete(fingerprint));

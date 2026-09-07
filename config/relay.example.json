@@ -39,14 +39,33 @@
         "profile": null,
         "reasoningEffort": "medium",
         "availability": "host-advertised",
-        "roles": ["planner", "executor", "reviewer"],
-        "routes": ["codex", "hybrid"],
-        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
-        "complexityBands": ["trivial", "normal"],
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "trivial",
+          "normal"
+        ],
         "tags": [],
         "priority": 100,
         "enabled": true,
-        "fallbacks": ["desktop-terra-normal"]
+        "fallbacks": [
+          "desktop-terra-normal"
+        ]
       },
       {
         "id": "desktop-terra-normal",
@@ -55,10 +74,27 @@
         "profile": null,
         "reasoningEffort": "medium",
         "availability": "host-advertised",
-        "roles": ["planner", "executor", "reviewer"],
-        "routes": ["codex", "hybrid"],
-        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
-        "complexityBands": ["trivial", "normal"],
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "trivial",
+          "normal"
+        ],
         "tags": [],
         "priority": 50,
         "enabled": true,
@@ -71,14 +107,33 @@
         "profile": null,
         "reasoningEffort": "xhigh",
         "availability": "host-advertised",
-        "roles": ["planner", "executor", "reviewer"],
-        "routes": ["codex", "hybrid"],
-        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
-        "complexityBands": ["complex", "high-risk"],
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "complex",
+          "high-risk"
+        ],
         "tags": [],
         "priority": 100,
         "enabled": true,
-        "fallbacks": ["desktop-terra-complex"]
+        "fallbacks": [
+          "desktop-terra-complex"
+        ]
       },
       {
         "id": "desktop-terra-complex",
@@ -87,10 +142,27 @@
         "profile": null,
         "reasoningEffort": "high",
         "availability": "host-advertised",
-        "roles": ["planner", "executor", "reviewer"],
-        "routes": ["codex", "hybrid"],
-        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
-        "complexityBands": ["complex", "high-risk"],
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "complex",
+          "high-risk"
+        ],
         "tags": [],
         "priority": 50,
         "enabled": true,
@@ -103,14 +175,33 @@
         "profile": null,
         "reasoningEffort": "medium",
         "availability": "entitlement-dependent",
-        "roles": ["planner", "executor", "reviewer"],
-        "routes": ["codex", "hybrid"],
-        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
-        "complexityBands": ["trivial", "normal"],
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "trivial",
+          "normal"
+        ],
         "tags": [],
         "priority": 100,
         "enabled": true,
-        "fallbacks": ["cli-spark-normal"]
+        "fallbacks": [
+          "cli-spark-normal"
+        ]
       },
       {
         "id": "cli-spark-normal",
@@ -119,10 +210,27 @@
         "profile": null,
         "reasoningEffort": "medium",
         "availability": "entitlement-dependent",
-        "roles": ["planner", "executor", "reviewer"],
-        "routes": ["codex", "hybrid"],
-        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
-        "complexityBands": ["trivial", "normal"],
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "trivial",
+          "normal"
+        ],
         "tags": [],
         "priority": 50,
         "enabled": true,
@@ -135,14 +243,33 @@
         "profile": null,
         "reasoningEffort": "xhigh",
         "availability": "entitlement-dependent",
-        "roles": ["planner", "executor", "reviewer"],
-        "routes": ["codex", "hybrid"],
-        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
-        "complexityBands": ["complex", "high-risk"],
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "complex",
+          "high-risk"
+        ],
         "tags": [],
         "priority": 100,
         "enabled": true,
-        "fallbacks": ["cli-terra-complex"]
+        "fallbacks": [
+          "cli-terra-complex"
+        ]
       },
       {
         "id": "cli-terra-complex",
@@ -151,14 +278,101 @@
         "profile": null,
         "reasoningEffort": "high",
         "availability": "entitlement-dependent",
-        "roles": ["planner", "executor", "reviewer"],
-        "routes": ["codex", "hybrid"],
-        "categories": ["analysis", "code_change", "content_creation", "infrastructure", "external_action", "mixed"],
-        "complexityBands": ["complex", "high-risk"],
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "complex",
+          "high-risk"
+        ],
         "tags": [],
         "priority": 50,
         "enabled": true,
         "fallbacks": []
+      },
+      {
+        "id": "desktop-astra-demanding",
+        "backend": "desktop-child",
+        "model": "gpt-6-astra",
+        "profile": null,
+        "reasoningEffort": "high",
+        "availability": "host-advertised",
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "complex",
+          "high-risk"
+        ],
+        "tags": [],
+        "priority": 150,
+        "enabled": false,
+        "fallbacks": [
+          "desktop-sol-complex"
+        ]
+      },
+      {
+        "id": "cli-astra-demanding",
+        "backend": "codex-cli",
+        "model": "gpt-6-astra",
+        "profile": null,
+        "reasoningEffort": "high",
+        "availability": "entitlement-dependent",
+        "roles": [
+          "planner",
+          "executor",
+          "reviewer"
+        ],
+        "routes": [
+          "codex",
+          "hybrid"
+        ],
+        "categories": [
+          "analysis",
+          "code_change",
+          "content_creation",
+          "infrastructure",
+          "external_action",
+          "mixed"
+        ],
+        "complexityBands": [
+          "complex",
+          "high-risk"
+        ],
+        "tags": [],
+        "priority": 150,
+        "enabled": false,
+        "fallbacks": [
+          "cli-sol-complex"
+        ]
       }
     ]
   },

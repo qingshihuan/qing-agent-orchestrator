@@ -1,6 +1,16 @@
 # Changelog
 
-本项目采用语义化版本编号。当前稳定版本为 `v0.8.1`；既有版本的历史记录与标签语义保持不变。
+本项目采用语义化版本编号。当前稳定版本为 `v0.9.0`；既有版本的历史记录与标签语义保持不变。
+
+## 0.9.0 - 2026-09-08
+
+### Added / Changed
+
+- Astra opt-in candidates and minimum-client validation without bypassing availability checks.
+- Lossless compact Executor Handoff; conditional reference loading in both skill editions.
+- Targeted cached model probes with explicit force refresh; bounded incremental log output with cursors.
+- Compact control output retains approval decisions, Handoff paths and planner warnings.
+- Both archives rebuilt; evidence and safety boundaries preserved. See docs/release-notes-v0.9.0.md and docs/context-efficiency-measurements.json.
 
 ## 0.8.1 - 2026-09-08
 

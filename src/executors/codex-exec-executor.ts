@@ -242,7 +242,7 @@ export function buildCodexPrompt(handoff: Handoff, context: ExecutionContext): s
     `Iteration: ${context.iteration}`,
     `Revision instructions: ${JSON.stringify(context.revisionInstructions)}`,
     "Handoff:",
-    JSON.stringify(handoff, null, 2),
+    JSON.stringify(handoff),
   ].join("\n");
 }
 

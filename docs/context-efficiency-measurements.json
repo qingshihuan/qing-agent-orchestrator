@@ -1,0 +1,31 @@
+{
+  "baseline": "b7317374fca396ec1f4959d1f250c876416cd49a",
+  "units": "UTF-8 bytes; not billed tokens or end-to-end latency",
+  "node": "v22.23.2",
+  "executorHandoff": {
+    "before": 3376,
+    "after": 2722,
+    "lossless": true
+  },
+  "logPage": {
+    "historyEvents": 200,
+    "returnedEvents": 20,
+    "before": 21893,
+    "after": 2244
+  },
+  "skills": {
+    "qing-agent-orchestrator": {
+      "before": 4052,
+      "after": 2942
+    },
+    "qing-agent-orchestrator-full": {
+      "before": 4167,
+      "after": 3895
+    }
+  },
+  "limits": [
+    "No connected model calls or billed-token measurement",
+    "Log paging does not optimize disk scanning",
+    "Conditional reference loading is an instruction policy, not an enforced host token cap"
+  ]
+}

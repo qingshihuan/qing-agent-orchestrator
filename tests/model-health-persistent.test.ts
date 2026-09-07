@@ -243,3 +243,19 @@ test("malformed persistent health records are ignored and re-probed", async () =
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("explicit force refresh bypasses health cache once and persists the new result", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "qing-force-health-"));
+  try {
+    const runner = new CacheProbeRunner();
+    const checker = new ModelHealthChecker(cacheOptions(directory), runner);
+    assert.equal((await checker.check(candidate)).state, "healthy");
+    assert.equal((await checker.check(candidate)).cacheState, "cached");
+    assert.equal(runner.calls.filter(args => args[0] === "exec").length, 1);
+    assert.equal((await checker.check(candidate, true)).state, "healthy");
+    assert.equal(runner.calls.filter(args => args[0] === "exec").length, 2);
+    const cachedRunner = new VersionOnlyRunner();
+    assert.equal((await new ModelHealthChecker(cacheOptions(directory), cachedRunner).check(candidate)).state, "healthy");
+    assert.deepEqual(cachedRunner.calls, [["--version"]]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
