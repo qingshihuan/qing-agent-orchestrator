@@ -1,0 +1,185 @@
+name: Prepare v0.8.1 release packages
+
+on:
+  push:
+    branches: [release/v0.8.1]
+    paths: [.github/workflows/prepare-v0.8.1.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-qing-v0.8.1
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'qingshihuan/qing-agent-orchestrator' && github.actor == 'qingshihuan'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify source baseline and reserve a new version
+        shell: python
+        run: |
+          import subprocess
+          baseline = '7d1dbab813b59183858901db413821c8ecf330a5'
+          parent = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
+          assert parent == baseline, 'Unexpected release preparation baseline'
+          changed = subprocess.check_output(['git', 'diff', '--name-only', baseline, 'HEAD'], text=True).splitlines()
+          assert changed == ['.github/workflows/prepare-v0.8.1.yml'], 'Unexpected source changes'
+          existing = subprocess.check_output(['git', 'ls-remote', '--tags', 'origin', 'refs/tags/v0.8.1'], text=True)
+          assert not existing.strip(), 'v0.8.1 tag already exists; refusing to reuse it'
+      - name: Synchronize version, release notes and documentation
+        shell: python
+        run: |
+          import json, pathlib
+          def read(path):
+              return pathlib.Path(path).read_text(encoding='utf-8')
+          def write(path, text):
+              pathlib.Path(path).write_bytes(text.encode('utf-8'))
+          def replace_once(text, old, new):
+              assert text.count(old) == 1, f'Unexpected release document structure: {old!r}'
+              return text.replace(old, new, 1)
+          for name in ('package.json', 'package-lock.json'):
+              value = json.loads(read(name))
+              assert value['version'] == '0.8.0'
+              value['version'] = '0.8.1'
+              if name == 'package-lock.json':
+                  assert value['packages']['']['version'] == '0.8.0'
+                  value['packages']['']['version'] = '0.8.1'
+              write(name, json.dumps(value, ensure_ascii=False, indent=2) + '\n')
+          changelog = read('CHANGELOG.md')
+          changelog = replace_once(changelog, '当前稳定版本为 `v0.8.0`', '当前稳定版本为 `v0.8.1`')
+          section = '''## 0.8.1 - 2026-09-08
+
+          ### Fixed
+
+          - 并发首次模型健康检查等待同一次缓存读取，等价候选共享探针并保留各自的审计 ID。
+          - 健康状态按当前模型、推理档位、profile、后端和角色指纹匹配，禁用或修改候选后不复用旧证明。
+          - 缓存写入串行化并使用唯一临时文件；磁盘缓存失败不改变实际探测结果，畸形记录忽略并重查。
+          - 失败的版本和目录发现可在后续显式检查恢复；取消或截断结果不再被当作健康证据。
+          - stdout/stderr 独立增量解码 UTF-8，修复跨块中文、emoji 和结尾残缺字符输出。
+          - 重复取消共享一次进程树终止流程；完成后释放原始输出缓冲和观察者引用，截断输出不保留超大底层 Buffer。
+          - 无效超时和输出预算在创建进程前拒绝；既有心跳测试改为等待持久化事件并在清理前等待退出。
+
+          ### Packaging and verification
+
+          - 发布已合并 PR #12 的修复，重新生成完整版预编译运行时、技能 ZIP 和 SHA-256 清单；标准版内容不变。
+          - 测试从 142 项增加至 158 项；保留 Windows/Linux 与 Node 18/22 的类型检查、完整测试及打包一致性验证。
+          - 不改变模型候选、编排预算、效果审批、sandbox 或默认禁用真实执行的配置。
+          - 健康检查回归使用模拟执行器，未完成真实账户模型端到端验收；不声称整体速度或 Token 节省比例。
+
+          '''
+          import textwrap
+          changelog = replace_once(changelog, '## 0.8.0 - 2026-08-26', textwrap.dedent(section) + '## 0.8.0 - 2026-08-26')
+          write('CHANGELOG.md', changelog)
+          for name, old_link, new_link, old_heading, addition in (
+              ('README.md', '[v0.8.0 发布说明](docs/release-notes-v0.8.0.md)', '[v0.8.1 发布说明](docs/release-notes-v0.8.1.md)', '## v0.8.0 发布重点',
+               '## v0.8.1 维护更新\n\n本次发布修复完整版的模型健康缓存并发、状态误复用、跨块中文/emoji 输出和重复进程取消，减少无效探针及任务结束后的缓冲保留。完整版运行时与安装 ZIP 已同步；标准版内容、模型候选、编排预算和效果审批规则不变。详见 [v0.8.1 发布说明](docs/release-notes-v0.8.1.md)。\n\n'),
+              ('README.en.md', '[v0.8.0 release notes](docs/release-notes-v0.8.0.md)', '[v0.8.1 release notes](docs/release-notes-v0.8.1.md)', '## v0.8.0 release highlights',
+               '## v0.8.1 maintenance update\n\nThis release fixes concurrent health-cache initialization, stale candidate status, split UTF-8 output, and repeated process cancellation in the full runtime. It avoids redundant probes and releases completed output buffers. The bundled runtime and full ZIP are synchronized; standard-edition content, model choices, orchestration budgets, and effect gates are unchanged. See the [v0.8.1 release notes](docs/release-notes-v0.8.1.md).\n\n'),
+          ):
+              text = replace_once(read(name), old_link, new_link)
+              text = replace_once(text, old_heading, addition + old_heading)
+              write(name, text)
+          reliability = replace_once(read('docs/runtime-reliability.md'), 'It does not publish a new release.', 'These fixes are included in v0.8.1; see release-notes-v0.8.1.md for packaging and upgrade details.')
+          write('docs/runtime-reliability.md', reliability)
+          notes = '''# v0.8.1 发布说明 / Release notes
+
+          本版本将已合并的 PR #12 运行时修复正式提供为可安装技能包，不改变 v0.8.0 的 Direct/Lite/Full 策略、模型候选、预算和效果审批边界。
+
+          ## 核心修复
+
+          - 模型健康检查：并发首次检查共享磁盘缓存读取；等价候选共享探测，同时保留各自审计身份。
+          - 健康状态与容错：配置变更或禁用后不沿用旧健康证明；缓存写入串行化，使用唯一临时文件；损坏缓存与写入失败不篡改实际预检结果。
+          - 发现失败恢复：后续显式检查可以重新发现版本或目录，保留失败缓存 TTL，不增加自动重试循环；取消、超时、截断不能冒充成功。
+          - 输出与进程：stdout/stderr 独立增量解码 UTF-8，修复中文和 emoji 跨块乱码；重复取消共享终止流程，任务完成后释放原始缓冲和观察者引用。
+          - 验证可靠性：新增 16 项回归测试，套件共 158 项；既有心跳测试改为等待持久化事件，保留全部原断言并在清理前等待任务结束。
+
+          ## 下载与升级
+
+          | 附件 | 用途 |
+          | --- | --- |
+          | `qing-agent-orchestrator-standard.zip` | 桌面标准版，不包含 CLI runtime；内容与 v0.8.0 相同。 |
+          | `qing-agent-orchestrator-full.zip` | 完整版，内含 v0.8.1 预编译运行时和本次修复。 |
+          | `SHA256SUMS.txt` | 两个 ZIP 的 SHA-256 校验清单。 |
+
+          已使用完整版的用户应更新完整版 ZIP。升级前备份自行修改的配置，尤其是 `runtime/config/relay.user.json`，不要直接覆盖本地定制配置。技能目录名保持不变。默认仍为 dry-run，真实执行默认关闭；高风险效果仍需原有批准。
+
+          ## 验证边界
+
+          发布沿用 Windows/Linux × Node 18/22 的类型检查和完整测试，以及 PowerShell Core 7.6.x 的确定性打包、安装验证和源码/运行时/ZIP 一致性检查。健康缓存测试使用模拟 ProcessRunner，进程测试使用 Node 子进程；这些证据不代表真实账户模型 entitlement 或 connected 模型端到端验收，不提供整体速度或 Token 节省比例承诺。
+
+          磁盘缓存仍是 best-effort、跨进程最后写入者生效的优化缓存，不是事务性证据数据库。既有 v0.8.0 标签和发布附件保持不变。
+
+          ## English summary
+
+          Patch release for PR #12: deduplicate concurrent health-cache reads and probes, bind status to the current candidate fingerprint, tolerate cache write failures, recover failed discovery on later explicit checks, preserve streaming UTF-8, share cancellation, and release completed buffers. The suite grows from 142 to 158 tests. Only the full edition's runtime changes; the standard ZIP is unchanged. Back up customized configuration before upgrading. Model choices, budgets, sandbox permissions and effect gates remain unchanged; no connected-model performance claim is made.
+          '''
+          notes_path = pathlib.Path('docs/release-notes-v0.8.1.md')
+          assert not notes_path.exists(), 'Release notes already exist'
+          write(str(notes_path), textwrap.dedent(notes))
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Run complete release test suite
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: npm test
+      - name: Rebuild and validate both installable editions
+        shell: pwsh
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/prepare-v081-${{ github.run_id }}"
+      - name: Verify version consistency and release-only change scope
+        shell: python
+        run: |
+          import hashlib, json, pathlib, subprocess, zipfile
+          package = json.loads(pathlib.Path('package.json').read_text())
+          lock = json.loads(pathlib.Path('package-lock.json').read_text())
+          runtime = json.loads(pathlib.Path('.agents/skills/qing-agent-orchestrator-full/runtime/package.json').read_text())
+          assert package['version'] == lock['version'] == lock['packages']['']['version'] == runtime['version'] == '0.8.1'
+          assert package == runtime, 'Packaged runtime metadata differs'
+          with zipfile.ZipFile('artifacts/qing-agent-orchestrator-full.zip') as archive:
+              assert json.loads(archive.read('runtime/package.json')) == package
+          old_standard = subprocess.check_output(['git', 'show', '7d1dbab813b59183858901db413821c8ecf330a5:artifacts/qing-agent-orchestrator-standard.zip'])
+          assert pathlib.Path('artifacts/qing-agent-orchestrator-standard.zip').read_bytes() == old_standard
+          manifest = pathlib.Path('artifacts/SHA256SUMS.txt').read_text().splitlines()
+          assert len(manifest) == 2
+          for line in manifest:
+              digest, name = line.split('  ')
+              assert hashlib.sha256((pathlib.Path('artifacts') / name).read_bytes()).hexdigest() == digest.lower()
+          expected = {
+              'package.json', 'package-lock.json', 'README.md', 'README.en.md', 'CHANGELOG.md',
+              'docs/runtime-reliability.md', 'docs/release-notes-v0.8.1.md',
+              '.agents/skills/qing-agent-orchestrator-full/runtime/package.json',
+              'artifacts/qing-agent-orchestrator-full.zip', 'artifacts/SHA256SUMS.txt',
+          }
+          tracked = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          untracked = set(subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard'], text=True).splitlines())
+          assert tracked | untracked == expected, f'Unexpected release file set: {tracked | untracked}'
+      - name: Commit validated release files to the preparation branch only
+        shell: pwsh
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          git add -- package.json package-lock.json README.md README.en.md CHANGELOG.md docs/runtime-reliability.md docs/release-notes-v0.8.1.md .agents/skills/qing-agent-orchestrator-full/runtime/package.json artifacts/qing-agent-orchestrator-full.zip artifacts/SHA256SUMS.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Staging release files failed.' }
+          git rm -- .github/workflows/prepare-v0.8.1.yml
+          if ($LASTEXITCODE -ne 0) { throw 'Removing temporary preparation workflow failed.' }
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Release Qing-Agent-Orchestrator v0.8.1 with rebuilt runtime and skill packages'
+          if ($LASTEXITCODE -ne 0) { throw 'Committing release files failed.' }
+          git push origin "HEAD:refs/heads/$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Branch changed or push failed; refusing to force push.' }
