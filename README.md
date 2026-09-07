@@ -1,6 +1,6 @@
 # 青-Agent-Orchestrator
 
-[English](README.en.md) · [v0.8.0 发布说明](docs/release-notes-v0.8.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
+[English](README.en.md) · [v0.8.1 发布说明](docs/release-notes-v0.8.1.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
 **让擅长理解、规划和沟通的模型先把事情想清楚，让擅长代码与工程执行的 Codex 完成实现与验证。**
 
@@ -27,6 +27,10 @@
 模型候选明确绑定 `desktop-child` 或 `codex-cli`。桌面候选继续以宿主公布的能力快照为准，内部子任务实际接收 `{ model, reasoning_effort }`，显式值只作用于委派后端，不改变父任务模型。CLI 路径实际接收 `-m` 和 `model_reasoning_effort`；配置层可以表达 `minimal|low|medium|high|xhigh|max|ultra`，但当前安装的 `codex debug models --bundled` 目录才是模型、推理强度和最低客户端版本的权威来源。CLI 候选还必须通过受限、只读、结构化的账户 entitlement 探针，目录有效但账户不可用的组合不会进入健康状态。
 
 这些可用性是当前 host/运行时快照，可能随版本、账户和 entitlement 漂移。普通与高风险任务都采用 completion-first 策略：CLI 候选必须通过现有健康预检，桌面真实 spawn 被拒绝时，只能沿内部显式、能力有效、同后端 fallback 链继续；链耗尽即失败关闭，绝不隐式选择无关候选。备用 pair 不提前展示，只有替换实际使用后才输出 `executionOwner: Codex`、被拒绝/实际 pair、原因、链与尝试，以及完整 scope 证明。CLI 真实调用只有在错误明确点名当前所选 model ID，并说明该模型 unknown、account/entitlement 不支持、metadata not found 或 unavailable 时才有限回退；认证、进程、超时、取消、输出上限、协议、model output schema 或其他普通错误不重试。缺失或不完整的 scope 证明要求新 gate。ChatGPT/Codex 订阅访问不等于 Responses API entitlement；本项目没有 provider URL、token 或 API adapter。
+
+## v0.8.1 维护更新
+
+本次发布修复完整版的模型健康缓存并发、状态误复用、跨块中文/emoji 输出和重复进程取消，减少无效探针及任务结束后的缓冲保留。完整版运行时与安装 ZIP 已同步；标准版内容、模型候选、编排预算和效果审批规则不变。详见 [v0.8.1 发布说明](docs/release-notes-v0.8.1.md)。
 
 ## v0.8.0 发布重点
 

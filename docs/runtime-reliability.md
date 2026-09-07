@@ -1,6 +1,6 @@
 # Runtime reliability and coordination overhead
 
-This focused maintenance change is based on `a4c3b80492fd0a514a8191a61b8118cef3b0edda` (v0.8.0). It does not change model candidates, the parent model, Direct/Lite/Full budgets, effect approvals, sandbox permissions, network allowlists, or the default disabled real-execution setting. It does not publish a new release.
+This focused maintenance change is based on `a4c3b80492fd0a514a8191a61b8118cef3b0edda` (v0.8.0). It does not change model candidates, the parent model, Direct/Lite/Full budgets, effect approvals, sandbox permissions, network allowlists, or the default disabled real-execution setting. These fixes are included in v0.8.1; see release-notes-v0.8.1.md for packaging and upgrade details.
 
 ## Changes
 

@@ -1,6 +1,6 @@
 # Qing-Agent-Orchestrator
 
-[简体中文](README.md) · [v0.8.0 release notes](docs/release-notes-v0.8.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+[简体中文](README.md) · [v0.8.1 release notes](docs/release-notes-v0.8.1.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 **Let the model that understands, plans, and communicates well clarify the work; let Codex handle code and engineering execution.**
 
@@ -27,6 +27,10 @@ Complexity is an explainable score rather than a fast/complex toggle. It helps d
 Every candidate is bound to `desktop-child` or `codex-cli`. Desktop candidates continue to use the capability snapshot advertised by the host. An internal child receives `{ model, reasoning_effort }`; explicit values affect only the delegated backend and never change the parent model. The CLI receives `-m` and `model_reasoning_effort`. Configuration may express `minimal|low|medium|high|xhigh|max|ultra`, but the installed `codex debug models --bundled` catalog is authoritative for model slugs, reasoning levels, and minimum client versions. A CLI candidate must also pass a bounded, read-only, structured account-entitlement probe, so a catalog-valid but account-unavailable pair never becomes healthy.
 
 Availability is a current host/runtime snapshot and can drift with version, account, or entitlement. Ordinary and high-risk work both use a completion-first policy: CLI candidates must pass the existing health probe, while a rejected desktop spawn may continue only along the internal explicit, capability-valid, same-backend fallback chain. Exhaustion fails closed and never selects an unrelated candidate. Fallback candidates are not shown in advance; only after a replacement is actually used does the result disclose `executionOwner: Codex`, rejected/actual pairs, reason, chain, attempts, and complete scope proof. A real CLI invocation retries only when the error explicitly names the selected model ID and says that model is unknown, unsupported by the account/entitlement, missing metadata, or unavailable. Authentication, process, timeout, cancellation, output-limit, protocol, model-output-schema, and ordinary failures are not retried. Missing or incomplete scope proof requires a new gate. ChatGPT/Codex subscription access is not Responses API entitlement; this project has no provider URL, token, or API adapter.
+
+## v0.8.1 maintenance update
+
+This release fixes concurrent health-cache initialization, stale candidate status, split UTF-8 output, and repeated process cancellation in the full runtime. It avoids redundant probes and releases completed output buffers. The bundled runtime and full ZIP are synchronized; standard-edition content, model choices, orchestration budgets, and effect gates are unchanged. See the [v0.8.1 release notes](docs/release-notes-v0.8.1.md).
 
 ## v0.8.0 release highlights
 
