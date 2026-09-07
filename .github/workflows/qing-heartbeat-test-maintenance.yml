@@ -1,0 +1,94 @@
+name: Stabilize heartbeat test synchronization
+
+on:
+  push:
+    branches: [codex/qing-runtime-efficiency-20260908]
+    paths: [.github/workflows/qing-heartbeat-test-maintenance.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  synchronize-test:
+    if: github.repository == 'qingshihuan/qing-agent-orchestrator' && github.actor == 'qingshihuan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Replace fixed startup delays with persisted-heartbeat synchronization
+        shell: python
+        run: |
+          import pathlib, subprocess
+          path = pathlib.Path('tests/relay.test.ts')
+          actual = subprocess.check_output(['git', 'hash-object', '--', str(path)], text=True).strip()
+          assert actual == '7003b8ea4515f73cc9edec60753472f5ba264ddc', 'Unexpected heartbeat test source'
+          source = path.read_text(encoding='utf-8')
+          marker = 'test("Relay persists ordered heartbeats and stops them after process exit", async () => {'
+          assert source.count(marker) == 1
+          before, test = source.split(marker)
+          replacements = [
+              ('  handoff.deliverables = [];\n  class DelayedExecutor',
+               '  handoff.deliverables = [];\n  let releaseProcess!: () => void;\n  const processMayExit = new Promise<void>((resolve) => { releaseProcess = resolve; });\n  let runPromise: ReturnType<Relay["run"]> | undefined;\n  class DelayedExecutor'),
+              ('      await delay(75);', '      await processMayExit;'),
+              ('    const runPromise = new Relay', '    runPromise = new Relay'),
+              ('    await delay(50);\n    const activeRecord = await handle.readRecord();',
+               '    // Observe persisted execution, not scheduler speed. Hold the fixture open\n'
+               '    // until both heartbeats are visible even on a loaded CI runner.\n'
+               '    void runPromise.catch(() => {});\n'
+               '    const deadline = Date.now() + 5000;\n'
+               '    let activeRecord = await handle.readRecord();\n'
+               '    while (activeRecord.lastEvent?.type !== "process.heartbeat" ||\n'
+               '           (await store.readEvents(handle.runId)).filter(({ type }) => type === "process.heartbeat").length < 2) {\n'
+               '      assert.ok(Date.now() < deadline, "Timed out waiting for persisted execution heartbeats.");\n'
+               '      await delay(10);\n'
+               '      activeRecord = await handle.readRecord();\n'
+               '    }'),
+              ('    await runPromise;\n    const events', '    releaseProcess();\n    await runPromise;\n    const events'),
+              ('  } finally {\n    await rm(directory, { recursive: true, force: true });\n  }',
+               '  } finally {\n'
+               '    // Never delete the journal while the Relay is still writing to it.\n'
+               '    releaseProcess();\n'
+               '    await runPromise?.catch(() => {});\n'
+               '    await rm(directory, { recursive: true, force: true });\n'
+               '  }'),
+          ]
+          for old, new in replacements:
+              assert test.count(old) == 1, f'Unexpected test structure: {old!r}'
+              test = test.replace(old, new, 1)
+          path.write_bytes((before + marker + test).encode('utf-8'))
+      - run: npm run typecheck
+      - name: Run complete suite on the previously failing platform
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: npm test
+      - name: Repeat the synchronized heartbeat test without weakening assertions
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          for attempt in $(seq 1 10); do
+            node --test --test-name-pattern='Relay persists ordered heartbeats' dist/tests/relay.test.js
+          done
+      - name: Commit this test-only fix and remove the temporary helper
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          git add -- tests/relay.test.ts
+          git rm -- .github/workflows/qing-heartbeat-test-maintenance.yml
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Synchronize heartbeat assertions with persisted events and await cleanup'
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
