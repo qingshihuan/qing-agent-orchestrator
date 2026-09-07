@@ -17,10 +17,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
-    env:
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,6 +27,10 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Verify baseline before modification
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
         run: npm test
       - name: Apply checksum-verified source patch
         shell: pwsh
@@ -54,9 +54,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Source verification failed.' }
       - run: npm run typecheck
       - name: Run complete updated test suite
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
         run: npm test
       - name: Rebuild and validate both installable editions
         shell: pwsh
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
         run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/maintenance-${{ github.run_id }}"
       - name: Commit verified source and regenerated bundles to this branch only
         shell: pwsh
