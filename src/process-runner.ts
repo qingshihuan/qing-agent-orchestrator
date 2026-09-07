@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 export interface ProcessStartMetadata {
@@ -87,6 +88,7 @@ export async function terminateProcessTree(
         resolve(value);
       };
       killer.once("error", () => {
+        if (settled) return;
         try {
           process.kill(pid, "SIGKILL");
           finish(true);
@@ -95,6 +97,7 @@ export async function terminateProcessTree(
         }
       });
       killer.once("close", (code) => {
+        if (settled) return;
         if (code === 0) { finish(true); return; }
         try { process.kill(pid, "SIGKILL"); finish(true); } catch { finish(false); }
       });
@@ -137,11 +140,21 @@ class NodeProcessHandle implements ProcessHandle {
   private cancellationKind: "cancelled" | "timed-out" | "output-limit" | null = null;
   private readonly stdoutChunks: Buffer[] = [];
   private readonly stderrChunks: Buffer[] = [];
+  private readonly stdoutDecoder = new StringDecoder("utf8");
+  private readonly stderrDecoder = new StringDecoder("utf8");
+  private terminationPromise: Promise<boolean> | null = null;
   private capturedBytes = 0;
   private spawnError: string | null = null;
   private resolveResult!: (result: ProcessResult) => void;
 
   constructor(request: ProcessRequest) {
+    // Node clamps invalid/overflowing delays to 1 ms. Reject them before spawn.
+    if (!Number.isInteger(request.timeoutMs) || request.timeoutMs <= 0 || request.timeoutMs > 2_147_483_647) {
+      throw new RangeError("timeoutMs must be an integer between 1 and 2147483647.");
+    }
+    if (!Number.isSafeInteger(request.maxOutputBytes) || request.maxOutputBytes < 0) {
+      throw new RangeError("maxOutputBytes must be a non-negative safe integer.");
+    }
     let spawned: ChildProcessWithoutNullStreams;
     try {
       spawned = spawn(request.command, request.args, {
@@ -153,6 +166,7 @@ class NodeProcessHandle implements ProcessHandle {
         ...(request.environment ? { env: request.environment } : {}),
       });
     } catch (error) {
+      this.settled = true;
       this.child = null;
       this.pid = null;
       this.spawnError = error instanceof Error ? error.message : String(error);
@@ -206,13 +220,18 @@ class NodeProcessHandle implements ProcessHandle {
     };
 
     const append = (chunk: Buffer | string, destination: Buffer[], stream: "stdout" | "stderr"): void => {
+      if (this.settled) return;
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       const remaining = Math.max(0, request.maxOutputBytes - this.capturedBytes);
       if (remaining > 0) {
-        const accepted = buffer.subarray(0, remaining);
+        // Copy only a truncated chunk: a small view would retain the entire
+        // incoming allocation even though most of it exceeds the output cap.
+        const accepted = buffer.length > remaining ? Buffer.from(buffer.subarray(0, remaining)) : buffer;
         destination.push(accepted);
         this.capturedBytes += accepted.length;
-        if (accepted.length > 0) notify({ stream, chunk: accepted.toString("utf8") });
+        const decoder = stream === "stdout" ? this.stdoutDecoder : this.stderrDecoder;
+        const text = decoder.write(accepted);
+        if (text.length > 0) notify({ stream, chunk: text });
       }
       if (buffer.length > remaining && !this.outputLimitExceeded) {
         this.outputLimitExceeded = true;
@@ -233,6 +252,12 @@ class NodeProcessHandle implements ProcessHandle {
       if (this.settled) return;
       this.settled = true;
       clearTimeout(timeout);
+      // Flush an incomplete final code point once, just as Buffer.toString
+      // does for the final captured result. Each stream has its own decoder.
+      const stdoutTail = this.stdoutDecoder.end();
+      const stderrTail = this.stderrDecoder.end();
+      if (stdoutTail) notify({ stream: "stdout", chunk: stdoutTail });
+      if (stderrTail) notify({ stream: "stderr", chunk: stderrTail });
       const endedAt = new Date().toISOString();
       const cancelled = this.cancellationKind === "cancelled";
       const result: ProcessResult = {
@@ -258,6 +283,11 @@ class NodeProcessHandle implements ProcessHandle {
       } catch {
         // Observability callbacks must never affect the result.
       }
+      // A retained handle should not retain both raw buffers and result text,
+      // nor closures belonging to observers that can no longer receive data.
+      this.stdoutChunks.length = 0;
+      this.stderrChunks.length = 0;
+      this.observers.clear();
       this.resolveResult(result);
     };
 
@@ -271,6 +301,7 @@ class NodeProcessHandle implements ProcessHandle {
   }
 
   observe(observer: ProcessObserver): () => void {
+    if (this.settled) return () => undefined;
     this.observers.add(observer);
     return () => {
       this.observers.delete(observer);
@@ -282,10 +313,15 @@ class NodeProcessHandle implements ProcessHandle {
   }
 
   private async cancelInternal(kind: "cancelled" | "timed-out" | "output-limit"): Promise<ProcessResult> {
-    if (this.settled) return this.result;
-    if (this.cancellationKind === null) this.cancellationKind = kind;
-    if (this.pid !== null) await terminateProcessTree(this.pid);
-    else this.child?.kill();
+    if (!this.settled && this.terminationPromise === null) {
+      this.cancellationKind = kind;
+      this.terminationPromise = this.pid !== null
+        ? terminateProcessTree(this.pid)
+        : Promise.resolve(this.child?.kill() ?? false);
+    }
+    // Cancel/timeout/output-limit may race. All callers share one tree-kill
+    // sequence and await its escalation even if the direct child exits first.
+    if (this.terminationPromise) await this.terminationPromise;
     return this.result;
   }
 

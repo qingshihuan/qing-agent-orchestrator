@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -89,9 +89,10 @@ export function modelSelectionArgs(candidate: Pick<ModelSelection, "backend" | "
 export class ModelHealthChecker {
   private readonly cache = new Map<string, ModelHealthRecord>();
   private readonly pending = new Map<string, Promise<ModelHealthRecord>>();
-  private versionPromise?: Promise<string>;
-  private catalogPromise?: Promise<CodexModelCatalog>;
-  private persistentCacheLoaded = false;
+  private versionPromise: Promise<string> | undefined;
+  private catalogPromise: Promise<CodexModelCatalog> | undefined;
+  private persistentCacheLoad?: Promise<void>;
+  private persistentCacheWrite: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly options: ModelHealthOptions,
@@ -107,26 +108,35 @@ export class ModelHealthChecker {
     const fingerprint = candidateFingerprint(candidate, cliVersion);
     const now = (this.options.now ?? Date.now)();
     const cached = this.cache.get(fingerprint);
-    if (cached?.expiresAt && Date.parse(cached.expiresAt) > now) return { ...cached, cacheState: "cached" };
+    if (cached?.expiresAt && Date.parse(cached.expiresAt) > now) return { ...cached, candidateId: candidate.id, cacheState: "cached" };
     const current = this.pending.get(fingerprint);
-    if (current) return { ...(await current), cacheState: "cached" };
+    if (current) return { ...(await current), candidateId: candidate.id, cacheState: "cached" };
     const task = this.validateCatalogThenProbe(candidate, cliVersion, fingerprint, now).finally(() => this.pending.delete(fingerprint));
     this.pending.set(fingerprint, task);
     return task;
   }
 
   status(candidate: ModelCandidate): ModelHealthRecord {
-    const records = [...this.cache.values()].filter(({ candidateId }) => candidateId === candidate.id);
+    if (!candidate.enabled) return this.unverified(candidate.id, "Candidate is disabled.");
+    // IDs can be reused after a configuration edit. Only the exact pair,
+    // profile and roles that were checked may reuse a health result.
+    const records = [...this.cache.values()].filter((record) =>
+      record.fingerprint === candidateFingerprint(candidate, record.cliVersion));
     const latest = records.sort((left, right) => String(right.checkedAt).localeCompare(String(left.checkedAt)))[0];
-    if (!latest) return this.unverified(candidate.id, candidate.enabled ? "Candidate has not been preflighted." : "Candidate is disabled.");
+    if (!latest) return this.unverified(candidate.id, "Candidate has not been preflighted.");
     const now = (this.options.now ?? Date.now)();
-    if (!latest.expiresAt || Date.parse(latest.expiresAt) <= now) return { ...latest, state: "expired", cacheState: "cached", reason: "Cached preflight has expired." };
-    return { ...latest, cacheState: "cached" };
+    if (!latest.expiresAt || Date.parse(latest.expiresAt) <= now) return { ...latest, candidateId: candidate.id, state: "expired", cacheState: "cached", reason: "Cached preflight has expired." };
+    return { ...latest, candidateId: candidate.id, cacheState: "cached" };
   }
 
-  private async loadPersistentCache(): Promise<void> {
-    if (this.persistentCacheLoaded) return;
-    this.persistentCacheLoaded = true;
+  private loadPersistentCache(): Promise<void> {
+    // Every concurrent check must await the same initial disk read, not just
+    // the first check. Otherwise later callers may launch unnecessary probes.
+    this.persistentCacheLoad ??= this.readPersistentCache();
+    return this.persistentCacheLoad;
+  }
+
+  private async readPersistentCache(): Promise<void> {
     if (!this.options.cachePath) return;
     try {
       const parsed = JSON.parse(await readFile(this.options.cachePath, "utf8")) as { version?: unknown; records?: unknown };
@@ -134,29 +144,43 @@ export class ModelHealthChecker {
       for (const value of parsed.records.slice(-128)) {
         if (!value || typeof value !== "object" || Array.isArray(value)) continue;
         const record = value as ModelHealthRecord;
-        if (typeof record.candidateId !== "string" || typeof record.fingerprint !== "string" || typeof record.reason !== "string") continue;
-        if (!record.fingerprint || !record.expiresAt || Number.isNaN(Date.parse(record.expiresAt))) continue;
-        this.cache.set(record.fingerprint, record);
+        if (typeof record.candidateId !== "string" || typeof record.fingerprint !== "string" || typeof record.reason !== "string" || typeof record.cliVersion !== "string") continue;
+        if (!/^[a-f0-9]{64}$/.test(record.fingerprint)) continue;
+        if (typeof record.checkedAt !== "string" || typeof record.expiresAt !== "string") continue;
+        const checkedAt = Date.parse(record.checkedAt);
+        const expiresAt = Date.parse(record.expiresAt);
+        if (!Number.isFinite(checkedAt) || !Number.isFinite(expiresAt) || expiresAt <= checkedAt) continue;
+        if (record.state === "healthy" ? record.failure !== null :
+          record.state !== "unhealthy" || !["timeout", "authentication", "process", "jsonl", "schema", "capability"].includes(record.failure ?? "")) continue;
+        this.cache.set(record.fingerprint, { ...record, reason: redactSensitiveText(record.reason) });
       }
     } catch {
       // A missing or malformed optimization cache never blocks execution.
     }
   }
 
-  private async persistCache(): Promise<void> {
-    if (!this.options.cachePath) return;
+  private persistCache(): Promise<void> {
     const target = this.options.cachePath;
-    const temporary = `${target}.${process.pid}.tmp`;
-    await mkdir(dirname(target), { recursive: true });
-    const records = [...this.cache.values()]
-      .sort((left, right) => String(left.checkedAt).localeCompare(String(right.checkedAt)))
-      .slice(-128);
-    try {
-      await writeFile(temporary, JSON.stringify({ version: "1.0", records }, null, 2) + "\n", "utf8");
-      await rename(temporary, target);
-    } finally {
-      await rm(temporary, { force: true }).catch(() => undefined);
-    }
+    if (!target) return Promise.resolve();
+    this.persistentCacheWrite = this.persistentCacheWrite.then(async () => {
+      // Serialize snapshots per checker and use a unique path across checkers.
+      // This is a best-effort cache, not a cross-process evidence transaction.
+      const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
+      try {
+        await mkdir(dirname(target), { recursive: true });
+        const records = [...this.cache.values()]
+          .sort((left, right) => String(left.checkedAt).localeCompare(String(right.checkedAt)))
+          .slice(-128);
+        await writeFile(temporary, JSON.stringify({ version: "1.0", records }, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+        await rename(temporary, target);
+      } catch {
+        // Cache permissions, disk space or concurrent replacement failures do
+        // not change the actual probe result or disable the in-memory cache.
+      } finally {
+        await rm(temporary, { force: true }).catch(() => undefined);
+      }
+    });
+    return this.persistentCacheWrite;
   }
 
   private async storeRecord(record: ModelHealthRecord): Promise<void> {
@@ -171,8 +195,13 @@ export class ModelHealthChecker {
   private async cliVersion(): Promise<string> {
     if (!this.versionPromise) {
       this.versionPromise = this.runner.run(this.request(["--version"], "", Math.min(this.options.timeoutMs, 10_000))).then((result) => {
-        if (result.exitCode !== 0 || result.spawnError || result.timedOut) throw new Error(failureFrom(result).reason);
+        if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded || result.cancelled) throw new Error(failureFrom(result).reason);
         return redactSensitiveText(result.stdout || result.stderr).trim().split(/\r?\n/)[0] || "unknown";
+      }).catch((error: unknown) => {
+        // A failed discovery is not a permanent rejection for this checker.
+        // Retry only on a later explicit check, never in an internal loop.
+        this.versionPromise = undefined;
+        throw error;
       });
     }
     return this.versionPromise;
@@ -186,10 +215,13 @@ export class ModelHealthChecker {
         Math.min(this.options.timeoutMs, 15_000),
         Math.max(this.options.maxOutputBytes ?? 0, 8 * 1024 * 1024),
       )).then((result) => {
-        if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded) {
+        if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded || result.cancelled) {
           throw new Error(`Codex bundled model catalog command failed. ${formatProcessDiagnostic(result)}`);
         }
         return parseCodexModelCatalog(result.stdout);
+      }).catch((error: unknown) => {
+        this.catalogPromise = undefined;
+        throw error;
       });
     }
     return this.catalogPromise;
@@ -268,7 +300,7 @@ export class ModelHealthChecker {
     let record: ModelHealthRecord;
     try {
       const result = await this.runner.run(this.request(args, "Return only the structured health object with status ok and capabilities planner, executor, reviewer. Do not inspect files or use tools."));
-      if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded) {
+      if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded || result.cancelled) {
         const failed = failureFrom(result);
         record = { candidateId: candidate.id, fingerprint, cliVersion, state: "unhealthy", cacheState: "fresh", checkedAt, expiresAt, ...failed };
       } else {
