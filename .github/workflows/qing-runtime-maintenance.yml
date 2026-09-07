@@ -1,0 +1,79 @@
+name: Apply and validate runtime maintenance
+
+on:
+  push:
+    branches: [codex/qing-runtime-efficiency-20260908]
+    paths:
+      - .github/workflows/qing-runtime-maintenance.yml
+      - .github/maintenance/runtime-reliability.patch.gz.b64
+
+permissions:
+  contents: read
+
+jobs:
+  apply-test-package:
+    if: github.repository == 'qingshihuan/qing-agent-orchestrator' && github.actor == 'qingshihuan'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
+      TMPDIR: ${{ runner.temp }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify baseline before modification
+        run: npm test
+      - name: Apply checksum-verified source patch
+        shell: pwsh
+        run: |
+          @'
+          import base64, gzip, hashlib, pathlib, subprocess
+          data = gzip.decompress(base64.b64decode(pathlib.Path('.github/maintenance/runtime-reliability.patch.gz.b64').read_text().strip(), validate=True))
+          assert hashlib.sha256(data).hexdigest() == '8d69fee4ce38a50bb5ba26a399ca3fb336b72ba5a7c1d3dd544d025416ffc80f', 'Patch checksum mismatch'
+          subprocess.run(['git', 'apply', '--check', '-'], input=data, check=True)
+          subprocess.run(['git', 'apply', '-'], input=data, check=True)
+          expected = {
+              'src/process-runner.ts': 'd5b266f760582b5b6cf7f952bf678ebf466d9523',
+              'src/model-health.ts': '62a6fc8605d1a6439bb264f389c07d9d98aa9885',
+              'tests/process-runner.test.ts': '2b220967bc8e77808f4b38252c30cdbf4942151f',
+              'tests/model-health-persistent.test.ts': 'bb89459a07732de34f7bc30bfe48919c292b4e1d',
+          }
+          for path, digest in expected.items():
+              actual = subprocess.check_output(['git', 'hash-object', '--', path], text=True).strip()
+              assert actual == digest, f'Content mismatch: {path}'
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Source verification failed.' }
+      - run: npm run typecheck
+      - name: Run complete updated test suite
+        run: npm test
+      - name: Rebuild and validate both installable editions
+        shell: pwsh
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/maintenance-${{ github.run_id }}"
+      - name: Commit verified source and regenerated bundles to this branch only
+        shell: pwsh
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:EXPECTED_HEAD) { throw 'Branch changed before checkout; refusing to publish.' }
+          git add -- src/process-runner.ts src/model-health.ts tests/process-runner.test.ts tests/model-health-persistent.test.ts .agents/skills/qing-agent-orchestrator-full/runtime artifacts
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to stage verified changes.' }
+          git rm -- .github/workflows/qing-runtime-maintenance.yml .github/maintenance/runtime-reliability.patch.gz.b64
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to remove temporary maintenance helpers.' }
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix runtime cache concurrency and process lifecycle; regenerate validated skill bundles'
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to commit changes.' }
+          git push origin "HEAD:refs/heads/$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Branch moved or push failed; no force push is permitted.' }
