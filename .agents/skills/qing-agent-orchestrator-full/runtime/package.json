@@ -1,6 +1,6 @@
 {
   "name": "qing-agent-orchestrator",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Desktop-first adaptive Direct, Lite, and Full ChatGPT/Codex orchestration with effect gates and optional CLI automation",
   "type": "module",
