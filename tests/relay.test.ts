@@ -593,12 +593,15 @@ test("Relay persists ordered heartbeats and stops them after process exit", asyn
   const directory = await mkdtemp(join(tmpdir(), "qing-relay-heartbeat-"));
   const handoff = await exampleHandoff();
   handoff.deliverables = [];
+  let releaseProcess!: () => void;
+  const processMayExit = new Promise<void>((resolve) => { releaseProcess = resolve; });
+  let runPromise: ReturnType<Relay["run"]> | undefined;
   class DelayedExecutor implements Executor {
     readonly name = "delayed";
     async execute(value: Handoff, context: ExecutionContext): Promise<ExecutionResult> {
       const startedAt = new Date().toISOString();
       context.onProcessStart?.({ pid: 4242, command: process.execPath, args: [], cwd: directory, startedAt });
-      await delay(75);
+      await processMayExit;
       context.onProcessExit?.({ pid: 4242, endedAt: new Date().toISOString(), exitCode: 0, signal: null, cancelled: false, timedOut: false, outputLimitExceeded: false });
       return {
         status: "succeeded", summary: "Delayed fixture completed.", artifacts: [...value.deliverables],
@@ -611,16 +614,26 @@ test("Relay persists ordered heartbeats and stops them after process exit", asyn
   try {
     const store = new RunStore(directory);
     const handle = await store.createRun(handoff);
-    const runPromise = new Relay(new DelayedExecutor(), new RuleBasedReviewer()).run(handoff, {
+    runPromise = new Relay(new DelayedExecutor(), new RuleBasedReviewer()).run(handoff, {
       maxIterations: 1, approvedGateIds: [], runHandle: handle, heartbeatIntervalMs: 20,
     });
-    await delay(50);
-    const activeRecord = await handle.readRecord();
+    // Observe persisted execution, not scheduler speed. Hold the fixture open
+    // until both heartbeats are visible even on a loaded CI runner.
+    void runPromise.catch(() => {});
+    const deadline = Date.now() + 5000;
+    let activeRecord = await handle.readRecord();
+    while (activeRecord.lastEvent?.type !== "process.heartbeat" ||
+           (await store.readEvents(handle.runId)).filter(({ type }) => type === "process.heartbeat").length < 2) {
+      assert.ok(Date.now() < deadline, "Timed out waiting for persisted execution heartbeats.");
+      await delay(10);
+      activeRecord = await handle.readRecord();
+    }
     assert.equal(activeRecord.phase, "executing");
     assert.equal(activeRecord.iteration, 1);
     assert.equal(activeRecord.processState, "running");
     assert.equal(activeRecord.lastEvent?.type, "process.heartbeat");
     assert.ok(Date.parse(activeRecord.updatedAt) >= Date.parse(activeRecord.startedAt));
+    releaseProcess();
     await runPromise;
     const events = await store.readEvents(handle.runId);
     const heartbeats = events.filter((event) => event.type === "process.heartbeat");
@@ -634,6 +647,9 @@ test("Relay persists ordered heartbeats and stops them after process exit", asyn
     assert.equal((await store.readEvents(handle.runId)).length, countAfterExit);
     assert.equal((await handle.readRecord()).status, "completed");
   } finally {
+    // Never delete the journal while the Relay is still writing to it.
+    releaseProcess();
+    await runPromise?.catch(() => {});
     await rm(directory, { recursive: true, force: true });
   }
 });
