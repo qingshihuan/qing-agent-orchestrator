@@ -106,7 +106,8 @@ test("entry skills keep gates while making reference loading conditional", async
     const source = await readFile(".agents/skills/"+name+"/SKILL.md", "utf8");
     assert.match(source, /do not preload references or schemas/);
     assert.match(source, /Never skip required review or verification/);
-    assert.match(source, /Astra is reserved/);
+    const policy = await readFile(".agents/skills/"+name+"/references/orchestrator-spec.md", "utf8");
+    assert.match(policy, /Astra is reserved/);
     assert.match(source, /same unchanged inputs, commands and environment/);
     assert.match(source, /pending independent-review obligations/);
   }

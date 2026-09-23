@@ -24,7 +24,7 @@ test("one-sentence router covers chat, codex, hybrid, and negated risk terms", (
   assert.equal(codeRoute.execution.mode, "desktop-native");
   assert.equal(codeRoute.execution.delegationTarget, "outer-session");
   assert.equal(codeRoute.orchestration.tier, "direct");
-  const lite = routeTask("先规划接口，然后实现并测试");
+  const lite = routeTask("使用 Qing Lite：先规划接口，然后实现并测试");
   assert.equal(lite.route, "hybrid");
   assert.equal(lite.orchestration.tier, "lite");
   assert.equal(lite.orchestration.childAgentBudget, 1);
@@ -143,7 +143,7 @@ test("start never invokes a Handoff Planner for Direct or Lite tiers", async () 
     assert.equal(directOutput.modelSelection, null);
     assert.equal(directOutput.plannerSource, null);
 
-    const lite = await runner.run({ ...base, args: ["dist/src/cli.js", "start", "--task", "先规划接口，然后实现并测试", "--workspace", directory, "--planner", "codex", "--out", liteOut, "--config", config] });
+    const lite = await runner.run({ ...base, args: ["dist/src/cli.js", "start", "--task", "使用 Qing Lite：先规划接口，然后实现并测试", "--workspace", directory, "--planner", "codex", "--out", liteOut, "--config", config] });
     assert.equal(lite.exitCode, 0, lite.stderr);
     const liteOutput = JSON.parse(lite.stdout) as Record<string, unknown>;
     assert.equal(liteOutput.status, "LITE_EXECUTION_REQUIRED");
@@ -182,7 +182,7 @@ test("dispatch exposes Direct, Lite, Full-ready, and gated Full without silent e
     assert.equal(codeOutput.modelSelection, null);
     assert.equal(codeOutput.delegationInvocation, null);
 
-    const liteRun = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "先规划接口，然后实现并测试", "--workspace", workspace, "--config", "config/relay.example.json", "--no-model-probe"] });
+    const liteRun = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "使用 Qing Lite：先规划接口，然后实现并测试", "--workspace", workspace, "--config", "config/relay.example.json", "--no-model-probe"] });
     assert.equal(liteRun.exitCode, 0, liteRun.stderr);
     const liteOutput = JSON.parse(liteRun.stdout) as Record<string, unknown>;
     assert.equal(liteOutput.status, "LITE_EXECUTION_REQUIRED");
@@ -223,7 +223,7 @@ test("dispatch exposes Direct, Lite, Full-ready, and gated Full without silent e
       assert.equal(ownerKeys.every((key) => key === "executionOwner"), true, ownerKeys.join(","));
     }
 
-    const inherited = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "先规划接口，然后实现并测试", "--workspace", workspace, "--config", "config/relay.user.example.json"] });
+    const inherited = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "使用 Qing Lite：先规划接口，然后实现并测试", "--workspace", workspace, "--config", "config/relay.user.example.json"] });
     assert.equal(inherited.exitCode, 0, inherited.stderr);
     const inheritedOutput = JSON.parse(inherited.stdout) as { modelSelection: unknown; delegationInvocation: { spawnAgent: unknown; inheritedDefaults: string[] } };
     assert.equal(inheritedOutput.modelSelection, null);

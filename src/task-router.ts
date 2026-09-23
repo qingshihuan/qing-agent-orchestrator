@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { DelegationEvidence } from "./delegation-benefit.js";
 import { detectCliReasonCodes, routeExecutionMode } from "./execution-mode-router.js";
 import { decideOrchestration } from "./orchestration-policy.js";
 import { createHandoffOrchestrationContract } from "./orchestration-policy.js";
@@ -20,6 +21,8 @@ export interface TaskRouteDecision {
 export interface TaskRouteOptions {
   edition?: OrchestratorEdition;
   orchestration?: OrchestrationConfig;
+  /** Facts already observed by the calling parent; not user approvals or a paid preflight. */
+  delegationEvidence?: DelegationEvidence;
 }
 
 const code = /实现|修复|重构|写代码|修改|新增|编辑|移除|删除|build|implement|fix|refactor|code|edit|remove/i;
@@ -125,9 +128,9 @@ export function routeTask(text: string, options: TaskRouteOptions = {}): TaskRou
   else if (signals.includes("analysis")) category = "analysis";
 
   const complexity = analyzeTaskComplexity({ text: task, category, role: "planner", routeSignals: signals });
-  const orchestration = decideOrchestration({ text: task, route, category, complexity, signals, config: options.orchestration });
+  const orchestration = decideOrchestration({ text: task, route, category, complexity, signals, config: options.orchestration, delegationEvidence: options.delegationEvidence });
   const reasons = orchestration.tier === "direct"
-    ? [route === "chat" ? "目标可由外层主会话直接回答。" : "目标是范围明确、可逆的单一工作，由父任务直接完成并验证。"]
+    ? [route === "chat" ? "目标可由外层主会话直接回答。" : "由父任务保留上下文直接完成并验证；步骤或复杂度本身不证明委派收益。"]
     : orchestration.tier === "lite"
       ? ["目标需要一次有界委派；最多创建一个 Executor，由父任务验证。"]
       : ["目标含高风险、跨系统、真正并行或显式完整编排信号，使用独立 Reviewer 的完整流程。"];

@@ -4,10 +4,10 @@ import { NodeProcessRunner } from "../src/process-runner.js";
 import { routeTask } from "../src/task-router.js";
 
 const shortTask = "删除 src/index.js 中未使用的 console.log，并运行相关测试";
-const mediumTask = "先重构认证接口，然后实现缓存并运行相关测试";
+const mediumTask = "使用 Qing Lite：先重构认证接口，然后实现缓存并运行相关测试";
 const longTask = "在同一个 TypeScript 仓库内完成一个范围明确的功能更新：调整路由器对文档、代码符号和路径的语义识别，同步更新相关单元测试和说明，保持公共 API 不变，不访问网络、不发布、不部署、不推送，并执行现有本地测试验证所有改动。所有修改必须留在当前仓库内，保留无关文件和用户已有改动。";
 
-test("v0.7 routes short and long coupled work Direct and keeps medium work Lite", () => {
+test("v0.7 routes coupled work Direct and preserves explicitly requested Lite", () => {
   const short = routeTask(shortTask);
   assert.equal(short.orchestration.tier, "direct");
   assert.equal(short.signals.includes("delete-action"), false);

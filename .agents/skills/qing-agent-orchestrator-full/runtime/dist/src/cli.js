@@ -293,7 +293,7 @@ async function main() {
             throw new Error("--cli-response must be auto, accept or decline");
         }
         if (decision.orchestration.tier === "direct") {
-            print({ ...decision, execution, status: "DIRECT_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffId: null, handoffPath: null, modelSelection: null, reviewerModelSelection: null, delegationInvocation: null, modelProbe: "not-applicable", nextStep: "Complete and, when executable, verify the in-scope work directly. No child, model allocation, Handoff approval, or CLI task was created." });
+            print({ ...decision, execution, status: "DIRECT_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffId: null, handoffPath: null, modelSelection: null, reviewerModelSelection: null, delegationInvocation: null, modelProbe: "not-applicable", nextStep: "Proceed directly to relevant work and required tests; do not spend another turn confirming this route, running a planner or probing models. No child or CLI task was created." });
             return;
         }
         if (execution.mode === "cli-recommended") {
@@ -323,7 +323,7 @@ async function main() {
         if (execution.mode === "desktop-native" || execution.mode === "desktop-fallback") {
             const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
             if (decision.orchestration.tier === "lite") {
-                print({ ...decision, execution, status: "LITE_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, reviewerModelSelection: null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Create at most one Executor child, perform targeted parent verification, and allow at most one revision; no independent Reviewer or plan approval is required." });
+                print({ ...decision, execution, status: "LITE_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, reviewerModelSelection: null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Delegate one complete implementation-and-test unit with fixed interfaces. Do not duplicate child work or inspect live traces; collect its final result, independently verify integration once per unchanged snapshot, and allow at most one revision. No plan approval is required." });
                 return;
             }
             const workspace = await resolveSafeWorkspace(runtimeRoot, requestedWorkspace);

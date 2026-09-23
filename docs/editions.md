@@ -9,3 +9,6 @@
 缺少依赖或认证返回 CLI_SETUP_REQUIRED，不会安装、登录或提交任务。单独的 Relay 保留安全默认、精确效果授权和 --allow-real-execution；它没有可信的桌面权限继承通道，不可把 full-access 截图当作授权。
 
 把对应 ZIP 解压到用户或项目的 .agents/skills；本项目打包不会自动部署到用户电脑。标准版有桌面专用 Handoff/Review schema；完整版有独立进程 schema 与安全默认配置，不携带 codex.exe。更新前备份自定义配置。
+
+## v0.13 speed/cost policy
+两版均使用 Direct 快速路径和委派收益检查；普通工作不会只因“多步骤”就新建子任务。默认父任务保留上下文，只有可独立验收且能转移实质工作的委派才进入 Lite。安全、Full 审查及宿主权限规则不变。详见 parent-overhead.md。

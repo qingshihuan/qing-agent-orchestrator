@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { assessDelegationBenefit, delegationDeclined } from "./delegation-benefit.js";
 export const defaultOrchestrationConfig = {
     mode: "adaptive",
     liteMaxChildren: 1,
@@ -65,11 +66,11 @@ export function decideOrchestration(input) {
             reasons,
         };
     }
-    const needsLite = explicitDelegation.test(text)
-        || input.complexity.band === "complex"
-        || input.complexity.band === "high-risk"
-        || input.complexity.scope === "multi-step"
-        || input.category === "mixed";
+    // Full safety/review requirements above always take precedence. Complexity
+    // alone cannot justify paying for an extra parent/child conversation.
+    const delegation = assessDelegationBenefit(text, input.delegationEvidence);
+    const requestedDelegation = explicitDelegation.test(text) && !delegationDeclined(text);
+    const needsLite = requestedDelegation || delegation.worthwhile;
     if (needsLite) {
         return {
             tier: "lite",
@@ -80,7 +81,7 @@ export function decideOrchestration(input) {
             modelSelectionRequired: true,
             approvalPolicy: "effects-only",
             decomposable: false,
-            reasons: [explicitDelegation.test(text) ? "explicit-delegation-request" : "bounded-complexity"],
+            reasons: [requestedDelegation ? "explicit-delegation-request" : delegation.reason],
         };
     }
     return {
@@ -92,7 +93,7 @@ export function decideOrchestration(input) {
         modelSelectionRequired: false,
         approvalPolicy: "effects-only",
         decomposable: false,
-        reasons: [input.route === "chat" ? "parent-answer" : "safe-single-scope-work"],
+        reasons: [input.route === "chat" ? "parent-answer" : "direct-retains-context", delegation.reason],
     };
 }
 /**

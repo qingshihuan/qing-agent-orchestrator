@@ -44,7 +44,8 @@ test("the routing benchmark restores the intended Direct Lite Full budget", () =
   const cases = [
     ["解释这个项目的作用", "direct"],
     ["实现一个示例功能", "direct"],
-    ["先规划接口，然后实现并测试", "lite"],
+    ["先规划接口，然后实现并测试", "direct"],
+    ["按固定接口独立实现完整模块并通过既定验收测试，父任务只做集成验收", "lite"],
     ["重构 src/config.ts 并运行相关测试", "direct"],
     ["修改 README 文档中的安装说明", "direct"],
     ["移除未使用的 import", "direct"],
@@ -73,7 +74,7 @@ test("the routing benchmark restores the intended Direct Lite Full budget", () =
     modelSelectionCount += Number(decision.orchestration.modelSelectionRequired);
   }
 
-  assert.deepEqual(counts, { direct: 9, lite: 1, full: 5 });
+  assert.deepEqual(counts, { direct: 10, lite: 1, full: 5 });
   assert.equal(childBudget, 11);
   assert.equal(reviewerCount, 5);
   assert.equal(modelSelectionCount, 6);
