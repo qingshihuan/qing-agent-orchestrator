@@ -410,14 +410,17 @@ export class CodexExecExecutor {
                         return handle.result;
                     })()
                     : await this.runner.run(request);
-                if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded) {
+                if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded || result.cancelled) {
                     const rejectionReason = this.activeModelSelection ? modelRejectionReason(result, this.activeModelSelection) : null;
                     if (!rejectionReason || !this.activeModelSelection) {
                         return failedResult(processFailure("codex exec failed", result), this.activeModelSelection?.fallbackAudit ?? null);
                     }
                     const rejected = this.activeModelSelection;
                     try {
-                        const replacement = continueModelFallbackAfterRejection(rejected, rejected.candidateId, rejectionReason, verifiedRuntimeScope);
+                        const prepared = this.options.prepareModelFallback
+                            ? await this.options.prepareModelFallback(rejected, rejectionReason)
+                            : rejected;
+                        const replacement = continueModelFallbackAfterRejection(prepared, rejected.candidateId, rejectionReason, verifiedRuntimeScope);
                         context.onModelEvent?.("model.rejected", {
                             executionOwner: "Codex",
                             rejectedPair: rejected.fallbackAudit.actualPair,

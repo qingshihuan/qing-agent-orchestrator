@@ -32,15 +32,11 @@ Direct 默认把安全单一范围工作留在父任务。Lite/Full 子任务仍
 
 模型选择同时生成内部 `fallbackPlan` 与 `fallbackAudit`。计划只包含能力有效的显式同后端链；审计保存 `executionOwner: Codex`、planned/actual pair、原因、整条链、每次 unavailable/rejected/selected 尝试，以及带 `scopeProofComplete` 的 backend、operations、allowedPaths、sandbox、permissions、effects 布尔证明。创建子任务前不展示备用模型，也不重复“父任务模型不变”；桌面真实 spawn 拒绝且替换 pair 实际使用后，父任务才在后续进度或最终结果中披露被拒绝 pair、原因和实际替换 pair。真实 CLI 调用只有在错误明确点名当前所选 model ID 且描述其标识、account entitlement、metadata 或 availability 被拒绝时才有限回退，并保持 prompt、workspace、sandbox、permissions、output schema、timeout 和 output limit 不变。高风险任务仍可按同一规则替换，因为 gate 约束操作效果而不是模型名称；证明缺失/不完整、跨后端或范围变化必须重新 gate。
 
-当前桌面 host capability snapshot：
+## 当前模型策略（v0.10）
 
-| model | reasoning effort |
-| --- | --- |
-| `gpt-5.6-sol`, `gpt-5.6-terra` | low, medium, high, xhigh, max, ultra |
-| `gpt-5.6-luna` | low, medium, high, xhigh, max |
-| `gpt-5.5`, `gpt-5.4` | low, medium, high, xhigh |
+显式任务候选仅允许 gpt-6-luna、gpt-6-sol、gpt-6-astra。桌面识别 low/medium/high/xhigh/max，但必须由实时 host 确认 pair。CLI 的档位与最低版本以本机目录为准，并需要账户预检；不把 API 文档当作桌面或订阅授权。
 
-该表严格对应当前 `collaboration.spawn_agent` 接口，不从 API catalog 推导桌面 entitlement。OpenAI 通用模型指导中的 `gpt-5.6` alias 指向 `gpt-5.6-sol`，API reasoning 支持 none、low、medium、high、xhigh、max；这是文档证据，不是本项目的 API 接口。本项目没有 API adapter，也不会把订阅可用性当成 Responses API entitlement。`gpt-5.3-codex-spark` 只存在于 CLI capability 表，并继续要求健康预检。
+Luna 处理 trivial/normal；Sol 负责复杂规划、执行与独立审查；Astra 是复杂任务的显式后备。任务内共享健康检查器，预检与最终选择使用同一条有序回退链。安全默认 modelRouting=inherit 不改父任务选择；三模型限制作用于显式子任务候选。详见 release-notes-v0.10.0.md。
 
 ## 关键不变量
 
@@ -78,5 +74,3 @@ Direct 默认把安全单一范围工作留在父任务。Lite/Full 子任务仍
 
 heartbeat 仅表达 Relay 尚未观察到退出。测试真值来自 Relay 父进程按 Handoff testPlan 执行并绑定的证据，不来自 Executor 自述或 JSONL 命令日志。
 
-## v0.9 Astra and efficiency
-The desktop configuration table additionally recognizes gpt-6-astra with low/medium/high/xhigh/max, but does not prove the live host advertises any of those pairs. Astra example candidates are disabled until explicitly configured for demanding work. CLI requires at least 0.153.0 plus the current catalog and account health checks; a higher catalog floor wins. Compact JSON changes serialization only, not the executable Handoff. Incremental log pages preserve complete journal evidence and disclose hasMore; unpaged commands remain compatible. See release-notes-v0.9.0.md.

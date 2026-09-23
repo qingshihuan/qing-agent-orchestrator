@@ -34,7 +34,7 @@ const unchangedScope = {
 } as const;
 
 test("desktop child selection uses host-advertised capability, role, band, and priority without a CLI health claim", () => {
-  const candidates = [candidate("desktop-deep", "desktop-child", "gpt-5.6-terra", 10), candidate("desktop-sol", "desktop-child", "gpt-5.6-sol", 20)];
+  const candidates = [candidate("desktop-deep", "desktop-child", "gpt-6-astra", 10), candidate("desktop-sol", "desktop-child", "gpt-6-sol", 20)];
   const selected = selectModelCandidate(candidates, new Map(), { backend: "desktop-child", role: "planner", route: "codex", category: "code_change", complexityBand: "complex" });
   assert.equal(selected.candidateId, "desktop-sol");
   assert.equal(selected.backend, "desktop-child");
@@ -42,17 +42,17 @@ test("desktop child selection uses host-advertised capability, role, band, and p
 });
 
 test("CLI selection requires a healthy entitlement-dependent candidate and follows only explicit same-backend fallbacks", () => {
-  const candidates = [candidate("cli-primary", "codex-cli", "gpt-5.6-sol", 100, ["cli-fallback"]), candidate("cli-fallback", "codex-cli", "gpt-5.6-terra", 1)];
+  const candidates = [candidate("cli-primary", "codex-cli", "gpt-6-sol", 100, ["cli-fallback"]), candidate("cli-fallback", "codex-cli", "gpt-6-astra", 1)];
   const statuses = new Map([["cli-primary", health("cli-primary", "unhealthy")], ["cli-fallback", health("cli-fallback", "healthy")]]);
   const selected = selectModelCandidate(candidates, statuses, { backend: "codex-cli", role: "executor", route: "hybrid", category: "mixed", complexityBand: "complex" });
   assert.equal(selected.candidateId, "cli-fallback");
   assert.equal(selected.executionOwner, "Codex");
   assert.equal(selected.fallbackFrom, "cli-primary");
   assert.deepEqual(selected.fallbackAudit.plannedPair, {
-    candidateId: "cli-primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: null, reasoningEffort: "high",
+    candidateId: "cli-primary", backend: "codex-cli", model: "gpt-6-sol", profile: null, reasoningEffort: "high",
   });
   assert.deepEqual(selected.fallbackAudit.actualPair, {
-    candidateId: "cli-fallback", backend: "codex-cli", model: "gpt-5.6-terra", profile: null, reasoningEffort: "high",
+    candidateId: "cli-fallback", backend: "codex-cli", model: "gpt-6-astra", profile: null, reasoningEffort: "high",
   });
   assert.deepEqual(selected.fallbackAudit.chain, ["cli-primary", "cli-fallback"]);
   assert.equal(selected.fallbackAudit.executionOwner, "Codex");
@@ -65,7 +65,7 @@ test("CLI selection requires a healthy entitlement-dependent candidate and follo
 });
 
 test("high-risk work may use an explicit healthy same-backend fallback without changing operation gates", () => {
-  const candidates = [candidate("cli-primary", "codex-cli", "gpt-5.6-sol", 100, ["cli-fallback"]), candidate("cli-fallback", "codex-cli", "gpt-5.6-terra", 1)];
+  const candidates = [candidate("cli-primary", "codex-cli", "gpt-6-sol", 100, ["cli-fallback"]), candidate("cli-fallback", "codex-cli", "gpt-6-astra", 1)];
   const statuses = new Map([["cli-primary", health("cli-primary", "unhealthy")], ["cli-fallback", health("cli-fallback", "healthy")]]);
   const selected = selectModelCandidate(candidates, statuses, { backend: "codex-cli", role: "executor", route: "hybrid", category: "mixed", complexityBand: "high-risk" });
   assert.equal(selected.candidateId, "cli-fallback");
@@ -75,7 +75,7 @@ test("high-risk work may use an explicit healthy same-backend fallback without c
 });
 
 test("desktop delegation exposes an ordered plan and continues after a real spawn rejection", () => {
-  const candidates = [candidate("desktop-primary", "desktop-child", "gpt-5.6-sol", 100, ["desktop-fallback"]), candidate("desktop-fallback", "desktop-child", "gpt-5.6-terra", 1)];
+  const candidates = [candidate("desktop-primary", "desktop-child", "gpt-6-sol", 100, ["desktop-fallback"]), candidate("desktop-fallback", "desktop-child", "gpt-6-astra", 1)];
   const selected = selectModelCandidate(candidates, new Map(), { backend: "desktop-child", role: "executor", route: "codex", category: "code_change", complexityBand: "complex" });
   assert.deepEqual(selected.fallbackPlan.orderedCandidates.map(({ candidateId }) => candidateId), ["desktop-primary", "desktop-fallback"]);
   const continued = continueModelFallbackAfterRejection(selected, "desktop-primary", "host rejected the requested model/reasoning pair", unchangedScope);
@@ -90,7 +90,7 @@ test("desktop delegation exposes an ordered plan and continues after a real spaw
 });
 
 test("post-rejection continuation requires a complete explicit scope proof", () => {
-  const candidates = [candidate("desktop-primary", "desktop-child", "gpt-5.6-sol", 100, ["desktop-fallback"]), candidate("desktop-fallback", "desktop-child", "gpt-5.6-terra", 1)];
+  const candidates = [candidate("desktop-primary", "desktop-child", "gpt-6-sol", 100, ["desktop-fallback"]), candidate("desktop-fallback", "desktop-child", "gpt-6-astra", 1)];
   const selected = selectModelCandidate(candidates, new Map(), { backend: "desktop-child", role: "executor", route: "codex", category: "code_change", complexityBand: "complex" });
   assert.throws(
     () => continueModelFallbackAfterRejection(selected, "desktop-primary", "spawn rejected"),
@@ -109,14 +109,14 @@ test("post-rejection continuation requires a complete explicit scope proof", () 
 });
 
 test("cross-backend or security-scope changes require a fresh gate and cannot be retried as substitution", () => {
-  const desktop = { candidateId: "desktop", backend: "desktop-child" as const, model: "gpt-5.6-sol", profile: null, reasoningEffort: "high" as const };
-  const cli = { candidateId: "cli", backend: "codex-cli" as const, model: "gpt-5.6-sol", profile: null, reasoningEffort: "high" as const };
+  const desktop = { candidateId: "desktop", backend: "desktop-child" as const, model: "gpt-6-sol", profile: null, reasoningEffort: "high" as const };
+  const cli = { candidateId: "cli", backend: "codex-cli" as const, model: "gpt-6-sol", profile: null, reasoningEffort: "high" as const };
   const crossBackend = assessModelFallbackGate(desktop, cli, unchangedScope);
   assert.equal(crossBackend.backendUnchanged, false);
   assert.equal(crossBackend.requiresNewGate, true);
   assert.deepEqual(crossBackend.reasons, ["backend-changed"]);
 
-  const candidates = [candidate("desktop-primary", "desktop-child", "gpt-5.6-sol", 100, ["desktop-fallback"]), candidate("desktop-fallback", "desktop-child", "gpt-5.6-terra", 1)];
+  const candidates = [candidate("desktop-primary", "desktop-child", "gpt-6-sol", 100, ["desktop-fallback"]), candidate("desktop-fallback", "desktop-child", "gpt-6-astra", 1)];
   const selected = selectModelCandidate(candidates, new Map(), { backend: "desktop-child", role: "executor", route: "codex", category: "code_change", complexityBand: "complex" });
   assert.throws(
     () => continueModelFallbackAfterRejection(selected, "desktop-primary", "spawn rejected", { operationsUnchanged: true, allowedPathsUnchanged: true, sandboxUnchanged: true, permissionsUnchanged: false, effectsUnchanged: true }),
@@ -125,7 +125,7 @@ test("cross-backend or security-scope changes require a fresh gate and cannot be
 });
 
 test("a rejected model with no explicit healthy safe fallback fails closed", () => {
-  const only = candidate("desktop-only", "desktop-child", "gpt-5.6-sol", 100);
+  const only = candidate("desktop-only", "desktop-child", "gpt-6-sol", 100);
   const selected = selectModelCandidate([only], new Map(), { backend: "desktop-child", role: "executor", route: "codex", category: "code_change", complexityBand: "complex" });
   assert.throws(
     () => continueModelFallbackAfterRejection(selected, "desktop-only", "host rejected the pair"),
@@ -134,27 +134,27 @@ test("a rejected model with no explicit healthy safe fallback fails closed", () 
 });
 
 test("an unavailable priority winner does not implicitly fall through to an unlisted candidate", () => {
-  const primary = candidate("cli-primary", "codex-cli", "gpt-5.6-sol", 100);
-  const unrelated = candidate("cli-unrelated", "codex-cli", "gpt-5.6-terra", 50);
+  const primary = candidate("cli-primary", "codex-cli", "gpt-6-sol", 100);
+  const unrelated = candidate("cli-unrelated", "codex-cli", "gpt-6-astra", 50);
   const statuses = new Map([[primary.id, health(primary.id, "unhealthy")], [unrelated.id, health(unrelated.id, "healthy")]]);
   assert.throws(() => selectModelCandidate([primary, unrelated], statuses, { backend: "codex-cli", role: "executor", route: "codex", category: "code_change", complexityBand: "complex" }), /No available configured candidate/);
 });
 
-test("desktop capabilities remain host snapshots while CLI efforts are deferred to the bundled runtime catalog", () => {
-  assert.ok(supportedReasoningEfforts("desktop-child", "gpt-5.6-sol").includes("ultra"));
-  assert.ok(!supportedReasoningEfforts("desktop-child", "gpt-5.6-luna").includes("ultra"));
-  assert.deepEqual(supportedReasoningEfforts("desktop-child", "gpt-5.3-codex-spark"), []);
-  assert.deepEqual(supportedReasoningEfforts("desktop-child", "gpt-5.4-mini"), []);
-
-  for (const effort of ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const) {
-    assert.ok(supportedReasoningEfforts("codex-cli", "future-catalog-model").includes(effort));
-    assert.equal(validateModelCapability({ backend: "codex-cli", model: "future-catalog-model", profile: null, reasoningEffort: effort, availability: "entitlement-dependent" }), null);
+test("only the three GPT-6 models are recognized; CLI efforts still need the local catalog", () => {
+  for (const model of ["gpt-6-luna", "gpt-6-sol", "gpt-6-astra"]) {
+    assert.deepEqual(supportedReasoningEfforts("desktop-child", model), ["low", "medium", "high", "xhigh", "max"]);
+    for (const effort of ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const) {
+      assert.equal(validateModelCapability({ backend: "codex-cli", model, profile: null, reasoningEffort: effort, availability: "entitlement-dependent" }), null);
+    }
   }
-  assert.match(validateModelCapability({ backend: "codex-cli", model: "gpt-5.6-sol", profile: null, reasoningEffort: "none", availability: "entitlement-dependent" }) ?? "", /unsupported/);
+  for (const model of ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.5", "gpt-5.4", "gpt-5.3-codex-spark", "future-catalog-model", "toString"]) {
+    for (const backend of ["desktop-child", "codex-cli"] as const) assert.deepEqual(supportedReasoningEfforts(backend, model), []);
+  }
+  assert.match(validateModelCapability({ backend: "codex-cli", model: "gpt-6-sol", profile: null, reasoningEffort: "none", availability: "entitlement-dependent" }) ?? "", /unsupported/);
 });
 
 test("disabled, expired, unverified, unsupported band, and wrong backend fail closed", () => {
-  const item = candidate("cli-only", "codex-cli", "gpt-5.6-sol", 1);
+  const item = candidate("cli-only", "codex-cli", "gpt-6-sol", 1);
   for (const state of ["expired", "unverified", "unhealthy"] as const) {
     assert.throws(() => selectModelCandidate([item], new Map([[item.id, health(item.id, state)]]), { backend: "codex-cli", role: "reviewer", route: "codex", category: "code_change", complexityBand: "complex" }), /No available configured candidate/);
   }

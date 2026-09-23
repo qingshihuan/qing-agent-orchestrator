@@ -35,16 +35,15 @@ test("Astra still obeys stricter local catalog versions and exact reasoning leve
   assert.match(validateCandidateAgainstCatalog({ ...astra, reasoningEffort: "max" }, catalog(), "0.154.0")!, /unsupported/);
   assert.match(validateCandidateAgainstCatalog(astra, { models: new Map() }, "0.154.0")!, /absent/);
 });
-test("Astra is opt-in and does not silently upgrade ordinary or complex default selection", async () => {
+test("GPT-6 defaults keep ordinary work on Luna and complex work on Sol", async () => {
   const config = await loadConfig("config/relay.example.json");
-  const entries = config.modelRouting.candidates.filter(c => c.model === astra.model);
-  assert.equal(entries.length, 2);
-  assert.ok(entries.every(c => !c.enabled && c.reasoningEffort === "high" && !c.complexityBands.includes("normal")));
-  const selected = selectModelCandidate(config.modelRouting.candidates, new Map(), { backend: "desktop-child", role: "executor", route: "codex", category: "code_change", complexityBand: "normal" });
-  assert.equal(selected.model, "gpt-5.6-luna");
-  const demanding = selectModelCandidate(config.modelRouting.candidates.map(c => c.id === "desktop-astra-demanding" ? { ...c, enabled: true } : c), new Map(), { backend: "desktop-child", role: "executor", route: "codex", category: "code_change", complexityBand: "complex" });
-  assert.equal(demanding.model, astra.model);
+  assert.deepEqual([...new Set(config.modelRouting.candidates.map(c => c.model))].sort(), ["gpt-6-astra", "gpt-6-luna", "gpt-6-sol"]);
+  for (const [complexityBand, expected] of [["normal", "gpt-6-luna"], ["complex", "gpt-6-sol"]] as const) {
+    const selection = selectModelCandidate(config.modelRouting.candidates, new Map(), { backend: "desktop-child", role: "executor", route: "codex", category: "code_change", complexityBand });
+    assert.equal(selection.model, expected);
+  }
 });
+
 test("an old-client cached Astra record cannot bypass the compatibility floor", async () => {
   const dir = await mkdtemp(join(tmpdir(), "qing-astra-min-"));
   try {
@@ -107,7 +106,7 @@ test("entry skills keep gates while making reference loading conditional", async
     const source = await readFile(".agents/skills/"+name+"/SKILL.md", "utf8");
     assert.match(source, /do not preload references or schemas/);
     assert.match(source, /Never skip required review or verification/);
-    assert.match(source, /Astra is opt-in/);
+    assert.match(source, /Astra is reserved/);
     assert.match(source, /same unchanged inputs, commands and environment/);
     assert.match(source, /pending independent-review obligations/);
   }
@@ -120,6 +119,7 @@ test("CLI targeted disabled Astra probe never invokes an unrelated enabled candi
   try {
     const config = JSON.parse(await readFile("config/relay.example.json", "utf8"));
     config.executor.codexExec.command = "nonexistent-qing-probe-sentinel";
+    config.modelRouting.candidates.find((c: { id: string }) => c.id === "cli-astra-demanding")!.enabled = false;
     const path = join(directory, "config.json");
     await writeFile(path, JSON.stringify(config));
     const runner = new NodeProcessRunner();

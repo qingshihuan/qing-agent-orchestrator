@@ -17,7 +17,7 @@ import {
 import type { ModelSelection } from "../src/types.js";
 
 function selectedModel(overrides: Partial<ModelSelection> = {}): ModelSelection {
-  const plannedPair = { candidateId: "executor-primary", backend: "codex-cli" as const, model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high" as const };
+  const plannedPair = { candidateId: "executor-primary", backend: "codex-cli" as const, model: "gpt-6-sol", profile: "work", reasoningEffort: "high" as const };
   return {
     executionOwner: "Codex",
     ...plannedPair,
@@ -62,7 +62,7 @@ function selectedModelWithFallback(): ModelSelection {
   const fallback = {
     candidateId: "executor-fallback",
     backend: "codex-cli" as const,
-    model: "gpt-5.6-terra",
+    model: "gpt-6-astra",
     profile: "work",
     reasoningEffort: "high" as const,
   };
@@ -339,7 +339,7 @@ test("executor propagates the selected model without changing security arguments
   }, fake).execute(handoff, { iteration: 1, revisionInstructions: [], onModelEvent: (type, value) => events.push({ type, value }) });
   assert.equal(execution.status, "succeeded");
   const args = fake.requests[2]!.args;
-  assert.equal(args[args.indexOf("-m") + 1], "gpt-5.6-sol");
+  assert.equal(args[args.indexOf("-m") + 1], "gpt-6-sol");
   assert.equal(args[args.indexOf("--profile") + 1], "work");
   assert.equal(args[args.lastIndexOf("-c") + 1], 'model_reasoning_effort="high"');
   assert.equal(args[args.indexOf("--sandbox") + 1], "workspace-write");
@@ -354,7 +354,7 @@ test("executor propagates the selected model without changing security arguments
 test("runtime model rejection retries the next explicit candidate with identical security scope and returns the final audit", async () => {
   const handoff = await exampleHandoff();
   const fake = new FakeCodexRunner(handoff, true, false, [
-    processResult({ exitCode: 1, stderr: "Requested model gpt-5.6-sol is unavailable for this invocation." }),
+    processResult({ exitCode: 1, stderr: "Requested model gpt-6-sol is unavailable for this invocation." }),
     processResult({ stdout: '{"type":"thread.started","thread_id":"fallback"}\n{"type":"turn.completed"}\n' }),
   ]);
   const events: Array<{ type: string; value: Record<string, unknown> }> = [];
@@ -384,7 +384,7 @@ test("runtime model rejection retries the next explicit candidate with identical
   assert.equal(primaryRequest.maxOutputBytes, fallbackRequest.maxOutputBytes);
   assert.deepEqual(primaryRequest.environment, fallbackRequest.environment);
   assert.deepEqual(argsWithoutModelPair(primaryRequest.args), argsWithoutModelPair(fallbackRequest.args));
-  assert.equal(fallbackRequest.args[fallbackRequest.args.indexOf("-m") + 1], "gpt-5.6-terra");
+  assert.equal(fallbackRequest.args[fallbackRequest.args.indexOf("-m") + 1], "gpt-6-astra");
   assert.deepEqual(events.map(({ type }) => type), [
     "model.selected",
     "model.attempt",
@@ -398,8 +398,8 @@ test("runtime model rejection retries the next explicit candidate with identical
 test("runtime model rejection chain exhaustion fails closed with every attempt disclosed", async () => {
   const handoff = await exampleHandoff();
   const fake = new FakeCodexRunner(handoff, true, false, [
-    processResult({ exitCode: 1, stderr: "Model gpt-5.6-sol is unavailable." }),
-    processResult({ exitCode: 1, stderr: "Model gpt-5.6-terra is unavailable." }),
+    processResult({ exitCode: 1, stderr: "Model gpt-6-sol is unavailable." }),
+    processResult({ exitCode: 1, stderr: "Model gpt-6-astra is unavailable." }),
   ]);
   const execution = await new CodexExecExecutor({ ...options(), modelSelection: selectedModelWithFallback() }, fake)
     .execute(handoff, { iteration: 1, revisionInstructions: [] });
@@ -413,13 +413,13 @@ test("runtime model rejection chain exhaustion fails closed with every attempt d
 test("explicit selected-model identifier, entitlement, and metadata rejection can use the bounded fallback", async () => {
   const handoff = await exampleHandoff();
   for (const message of [
-    "Unknown model 'gpt-5.6-sol'.",
-    "Unknown model gpt-5.6-sol.",
-    "The model 'gpt-5.6-sol' is not supported with your ChatGPT account.",
-    "Model metadata not found for 'gpt-5.6-sol'.",
-    "Model metadata not found for gpt-5.6-sol.",
-    "Error details:\nUnknown model 'gpt-5.6-sol'.",
-    "Error details:\r\nModel metadata not found for gpt-5.6-sol.",
+    "Unknown model 'gpt-6-sol'.",
+    "Unknown model gpt-6-sol.",
+    "The model 'gpt-6-sol' is not supported with your ChatGPT account.",
+    "Model metadata not found for 'gpt-6-sol'.",
+    "Model metadata not found for gpt-6-sol.",
+    "Error details:\nUnknown model 'gpt-6-sol'.",
+    "Error details:\r\nModel metadata not found for gpt-6-sol.",
   ]) {
     const fake = new FakeCodexRunner(handoff, true, false, [
       processResult({ exitCode: 1, stderr: message }),
@@ -448,18 +448,18 @@ test("schema, protocol, authentication, process, timeout, cancellation, output-l
     processResult({ exitCode: 1, stderr: "Invalid output schema for model response." }),
     processResult({ exitCode: 1, stderr: "Model output schema unsupported by server." }),
     processResult({ exitCode: 1, stderr: "Invalid protocol message returned by model worker." }),
-    processResult({ exitCode: 1, stderr: "Invalid output schema for model gpt-5.6-sol response." }),
-    processResult({ exitCode: 1, stderr: "Model output schema unsupported by server for gpt-5.6-sol." }),
-    processResult({ exitCode: 1, stderr: "Model gpt-5.6-sol is not supported for output schema." }),
-    processResult({ exitCode: 1, stderr: "Invalid protocol message returned by model gpt-5.6-sol worker." }),
-    processResult({ exitCode: 1, stderr: "Protocol error: selected model gpt-5.6-sol is unavailable." }),
-    processResult({ exitCode: 1, stderr: "Output schema validation failed: unknown model gpt-5.6-sol field." }),
-    processResult({ exitCode: 1, stderr: "Worker process crashed; model gpt-5.6-sol is unavailable." }),
-    processResult({ exitCode: 1, stderr: "Ordinary task error: model gpt-5.6-sol is unavailable in generated documentation." }),
-    processResult({ exitCode: 1, stderr: "Selected identifier: gpt-5.6-sol\nModel metadata not found." }),
-    processResult({ exitCode: 1, stderr: "Unknown model gpt-5.6-terra." }),
-    processResult({ exitCode: 1, stderr: "Unknown model gpt-5.6-sol.foo." }),
-    processResult({ exitCode: 1, stderr: "Model metadata not found for gpt-5.6-sol-extra." }),
+    processResult({ exitCode: 1, stderr: "Invalid output schema for model gpt-6-sol response." }),
+    processResult({ exitCode: 1, stderr: "Model output schema unsupported by server for gpt-6-sol." }),
+    processResult({ exitCode: 1, stderr: "Model gpt-6-sol is not supported for output schema." }),
+    processResult({ exitCode: 1, stderr: "Invalid protocol message returned by model gpt-6-sol worker." }),
+    processResult({ exitCode: 1, stderr: "Protocol error: selected model gpt-6-sol is unavailable." }),
+    processResult({ exitCode: 1, stderr: "Output schema validation failed: unknown model gpt-6-sol field." }),
+    processResult({ exitCode: 1, stderr: "Worker process crashed; model gpt-6-sol is unavailable." }),
+    processResult({ exitCode: 1, stderr: "Ordinary task error: model gpt-6-sol is unavailable in generated documentation." }),
+    processResult({ exitCode: 1, stderr: "Selected identifier: gpt-6-sol\nModel metadata not found." }),
+    processResult({ exitCode: 1, stderr: "Unknown model gpt-6-astra." }),
+    processResult({ exitCode: 1, stderr: "Unknown model gpt-6-sol.foo." }),
+    processResult({ exitCode: 1, stderr: "Model metadata not found for gpt-6-sol-extra." }),
     processResult({ exitCode: 1, stderr: "401 Unauthorized: authentication token expired" }),
     processResult({ exitCode: null, spawnError: "spawn ENOENT" }),
     processResult({ exitCode: null, timedOut: true, stderr: "Timed out" }),
@@ -685,4 +685,52 @@ test("diagnostic text redacts common credential forms", () => {
   );
   assert.doesNotMatch(redacted, /secret-value|sk-abcdefghij|private|abc\.def\.ghi/);
   assert.match(redacted, /REDACTED/);
+});
+
+
+test("runtime rejection lazily prepares an unverified fallback and preserves process scope", async () => {
+  const handoff = await exampleHandoff();
+  const selection = selectedModelWithFallback();
+  selection.fallbackPlan.orderedCandidates[1]!.observedState = "unverified";
+  const runner = new FakeCodexRunner(handoff, true, false, [processResult({exitCode:1,stderr:"unknown model gpt-6-sol"})]);
+  let preparations = 0;
+  const executor = new CodexExecExecutor({ ...options(), modelSelection: selection,
+    prepareModelFallback: async (current, reason) => {
+      preparations++;
+      assert.match(reason,/gpt-6-sol/);
+      assert.equal(current.fallbackPlan.orderedCandidates[1]!.observedState,"unverified");
+      return { ...current, fallbackPlan: { ...current.fallbackPlan, orderedCandidates: current.fallbackPlan.orderedCandidates.map((c,i)=>i===1?{...c,observedState:"healthy" as const}:c) } };
+    },
+  }, runner);
+  const result = await executor.execute(handoff,{iteration:1,revisionInstructions:[]});
+  assert.equal(result.status,"succeeded");
+  assert.equal(preparations,1);
+  assert.equal(executor.finalModelSelection?.model,"gpt-6-astra");
+  const attempts = runner.requests.filter(r=>r.args[0]==="exec");
+  assert.equal(attempts.length,2);
+  assert.equal(attempts[0]!.stdin,attempts[1]!.stdin);
+  assert.deepEqual(argsWithoutModelPair(attempts[0]!.args),argsWithoutModelPair(attempts[1]!.args));
+  assert.equal(result.modelFallbackAudit?.gateAssessment.requiresNewGate,false);
+});
+test("cancellation with zero exit and valid output still fails without probing backups", async () => {
+  const handoff = await exampleHandoff();
+  const runner = new FakeCodexRunner(handoff,true,false,[processResult({cancelled:true,stdout:'{"type":"turn.completed"}'})]);
+  let preparations=0;
+  const executor = new CodexExecExecutor({...options(),modelSelection:selectedModelWithFallback(),prepareModelFallback:async current=>{preparations++;return current;}},runner);
+  const result=await executor.execute(handoff,{iteration:1,revisionInstructions:[]});
+  assert.equal(result.status,"failed");
+  assert.match(result.summary,/cancelled/);
+  assert.equal(preparations,0);
+  assert.equal(runner.requests.filter(r=>r.args[0]==="exec").length,1);
+});
+test("ordinary failure and timeout never trigger lazy model preflight", async () => {
+  const handoff=await exampleHandoff();
+  for(const failure of [processResult({exitCode:1,stderr:"ordinary task error"}),processResult({exitCode:null,timedOut:true})]) {
+    const runner=new FakeCodexRunner(handoff,true,false,[failure]);
+    let preparations=0;
+    const result=await new CodexExecExecutor({...options(),modelSelection:selectedModelWithFallback(),prepareModelFallback:async current=>{preparations++;return current;}},runner).execute(handoff,{iteration:1,revisionInstructions:[]});
+    assert.equal(result.status,"failed");
+    assert.equal(preparations,0);
+    assert.equal(runner.requests.filter(r=>r.args[0]==="exec").length,1);
+  }
 });

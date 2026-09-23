@@ -10,7 +10,7 @@ function result(overrides: Partial<ProcessResult> = {}): ProcessResult {
 }
 
 const candidate: ModelCandidate = {
-  id: "primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent", roles: ["planner", "executor"],
+  id: "primary", backend: "codex-cli", model: "gpt-6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent", roles: ["planner", "executor"],
   routes: ["codex"], categories: ["code_change"], complexityBands: ["complex"], tags: [], priority: 1, enabled: true, fallbacks: [],
 };
 
@@ -38,7 +38,7 @@ class HealthRunner implements ProcessRunner {
     if (request.args[0] === "debug") {
       if (this.mode === "catalog-process") return result({ exitCode: 2, stderr: "unknown subcommand models" });
       if (this.mode === "catalog-schema") return result({ stdout: "{}" });
-      const slug = this.mode === "missing-model" ? "another-model" : "gpt-5.6-sol";
+      const slug = this.mode === "missing-model" ? "another-model" : "gpt-6-sol";
       const efforts = this.mode === "unsupported-effort" ? ["low"] : ["low", "medium", "high", "xhigh", "max", "ultra"];
       return result({ stdout: JSON.stringify({
         models: [{
@@ -73,7 +73,7 @@ test("preflight validates the bundled catalog, then uses shell-free model/profil
   assert.ok(runner.requests[1]!.maxOutputBytes >= 8 * 1024 * 1024);
   const probe = runner.requests[2]!;
   assert.equal(probe.command, "fake-codex");
-  assert.deepEqual(probe.args.slice(probe.args.indexOf("-m"), probe.args.indexOf("-m") + 7), ["-m", "gpt-5.6-sol", "--profile", "work", "-c", 'model_reasoning_effort="high"', "--ephemeral"]);
+  assert.deepEqual(probe.args.slice(probe.args.indexOf("-m"), probe.args.indexOf("-m") + 7), ["-m", "gpt-6-sol", "--profile", "work", "-c", 'model_reasoning_effort="high"', "--ephemeral"]);
   assert.equal(probe.args.includes("--sandbox"), true);
   assert.equal(probe.args[probe.args.indexOf("--sandbox") + 1], "read-only");
   assert.match(record.reason, /catalog validation/);
@@ -126,8 +126,8 @@ test("long process diagnostics include exit status, every stream, a bounded head
 
 test("malicious tokens and non-CLI backends are rejected locally while catalog-valid future efforts remain expressible", () => {
   assert.throws(() => modelSelectionArgs({ backend: "codex-cli", model: "good; calc", profile: null, reasoningEffort: "high", availability: "entitlement-dependent" }), /unsafe/);
-  assert.throws(() => modelSelectionArgs({ backend: "codex-cli", model: "gpt-5.6-sol", profile: "bad profile", reasoningEffort: "high", availability: "entitlement-dependent" }), /unsafe/);
-  assert.throws(() => modelSelectionArgs({ backend: "codex-cli", model: "gpt-5.6-sol", profile: null, reasoningEffort: "none", availability: "entitlement-dependent" }), /unsupported/);
-  assert.doesNotThrow(() => modelSelectionArgs({ backend: "codex-cli", model: "gpt-5.6-sol", profile: null, reasoningEffort: "ultra", availability: "entitlement-dependent" }));
-  assert.throws(() => modelSelectionArgs({ backend: "desktop-child", model: "gpt-5.6-sol", profile: null, reasoningEffort: "high", availability: "host-advertised" }), /codex-cli/);
+  assert.throws(() => modelSelectionArgs({ backend: "codex-cli", model: "gpt-6-sol", profile: "bad profile", reasoningEffort: "high", availability: "entitlement-dependent" }), /unsafe/);
+  assert.throws(() => modelSelectionArgs({ backend: "codex-cli", model: "gpt-6-sol", profile: null, reasoningEffort: "none", availability: "entitlement-dependent" }), /unsupported/);
+  assert.doesNotThrow(() => modelSelectionArgs({ backend: "codex-cli", model: "gpt-6-sol", profile: null, reasoningEffort: "ultra", availability: "entitlement-dependent" }));
+  assert.throws(() => modelSelectionArgs({ backend: "desktop-child", model: "gpt-6-sol", profile: null, reasoningEffort: "high", availability: "host-advertised" }), /codex-cli/);
 });

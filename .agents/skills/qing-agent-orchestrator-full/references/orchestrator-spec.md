@@ -20,5 +20,6 @@ Expose `ChatGPT` for outer-parent ownership and `Codex` for delegated execution.
 
 Stable states are `DIRECT_EXECUTION_REQUIRED`, `LITE_EXECUTION_REQUIRED`, `FULL_EXECUTION_READY`, `AWAITING_APPROVAL`, and `DENIED`. Approval applies to consequential effects, not to the existence of a plan or Handoff.
 
-## v0.9 context and model policy
-Load only the reference sections required by the current phase. Give a child a bounded objective, relevant paths, acceptance criteria and the unchanged safety contract, not the full conversation. Preserve required verification and independent review. Astra (`gpt-6-astra`) is an opt-in demanding-work candidate, not a blanket upgrade. A recognized model name is not proof of the current host's exact model/effort availability; confirm that pair before delegation. Do not infer desktop access from a public API model listing. Existing normal-task choices remain unchanged.
+## v0.10 GPT-6 routing
+
+GPT-6 task-model policy: only gpt-6-luna, gpt-6-sol and gpt-6-astra. Direct creates no child. For delegated trivial work use Luna/low; normal work Luna/medium; complex planning Sol/medium; complex execution and independent review Sol/high. Astra is reserved for demanding work and explicit complex-task fallback, not ordinary-task retry. A failed task or test is not model unavailability. Preserve the revision budget; diagnose the failure instead of trying every model. Verify live host/CLI availability and disclose the actual pair. Never downgrade high-risk review to Luna merely to save credits. The parent model is unchanged.

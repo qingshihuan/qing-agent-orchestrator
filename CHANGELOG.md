@@ -1,6 +1,16 @@
 # Changelog
 
-本项目采用语义化版本编号。当前稳定版本为 `v0.9.0`；既有版本的历史记录与标签语义保持不变。
+本项目采用语义化版本编号。当前稳定版本为 `v0.10.0`；既有版本的历史记录与标签语义保持不变。
+
+## 0.10.0 - 2026-09-23
+
+### Changed / Fixed
+
+- GPT-6 Luna/Sol/Astra only for explicit task candidates; older configs fail with migration guidance.
+- Role-specific low/medium/high profiles, shared per-command health discovery and consistent lazy fallback ordering.
+- Actual model rejection cooldown, stricter cache TTL reuse and cancelled-result rejection.
+- Rebuilt both editions; retained gates, evidence and default disabled real execution.
+- Deterministic process-request measurements and new scheduler regressions; see docs/release-notes-v0.10.0.md.
 
 ## 0.9.0 - 2026-09-08
 

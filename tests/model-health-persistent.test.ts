@@ -21,7 +21,7 @@ class VersionOnlyRunner implements ProcessRunner {
 const candidate: ModelCandidate = {
   id: "cli-cache-fixture",
   backend: "codex-cli",
-  model: "gpt-5.6-luna",
+  model: "gpt-6-luna",
   profile: null,
   reasoningEffort: "medium",
   availability: "entitlement-dependent",

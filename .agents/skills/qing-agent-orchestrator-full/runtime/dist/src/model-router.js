@@ -14,15 +14,14 @@ export class ModelFallbackRequiresGateError extends Error {
         this.name = "ModelFallbackRequiresGateError";
     }
 }
-// Recognized configuration pairs are not proof of this host/account's access.
-// Astra is opt-in; enable only after the host advertises the exact pair.
+// Project policy, not an assertion of live host/account access.
+export const supportedTaskModels = Object.freeze([
+    "gpt-6-luna", "gpt-6-sol", "gpt-6-astra",
+]);
 const desktopCapabilities = {
+    "gpt-6-luna": ["low", "medium", "high", "xhigh", "max"],
+    "gpt-6-sol": ["low", "medium", "high", "xhigh", "max"],
     "gpt-6-astra": ["low", "medium", "high", "xhigh", "max"],
-    "gpt-5.6-sol": ["low", "medium", "high", "xhigh", "max", "ultra"],
-    "gpt-5.6-terra": ["low", "medium", "high", "xhigh", "max", "ultra"],
-    "gpt-5.6-luna": ["low", "medium", "high", "xhigh", "max"],
-    "gpt-5.5": ["low", "medium", "high", "xhigh"],
-    "gpt-5.4": ["low", "medium", "high", "xhigh"],
 };
 // Config parsing accepts the full set of safe CLI effort tokens. The installed
 // Codex binary's bundled model catalog is authoritative and is checked before a
@@ -37,6 +36,8 @@ const catalogValidatedCliEfforts = [
     "ultra",
 ];
 export function supportedReasoningEfforts(backend, model) {
+    if (!Object.prototype.hasOwnProperty.call(desktopCapabilities, model))
+        return [];
     if (backend === "codex-cli")
         return catalogValidatedCliEfforts;
     return desktopCapabilities[model] ?? [];
@@ -50,7 +51,7 @@ export function validateModelCapability(candidate) {
         return "Codex CLI availability must remain entitlement-dependent until a health probe passes.";
     const efforts = supportedReasoningEfforts(candidate.backend, candidate.model);
     if (efforts.length === 0)
-        return `Model '${candidate.model}' is not in the declared ${candidate.backend} capability snapshot.`;
+        return `Model '${candidate.model}' is outside the GPT-6 task-model policy; use gpt-6-luna, gpt-6-sol or gpt-6-astra. Migrate the saved candidate configuration before retrying.`;
     if (!efforts.includes(candidate.reasoningEffort))
         return `Reasoning effort '${candidate.reasoningEffort}' is unsupported for ${candidate.backend}/${candidate.model}.`;
     return null;
@@ -202,7 +203,7 @@ function selectionFromPlan(plan, selectedIndex, role, complexityBand, attempts, 
         },
     };
 }
-export function selectModelCandidate(candidates, health, request) {
+export function planModelCandidates(candidates, health, request) {
     const configured = candidates.filter((candidate) => supports(candidate, request));
     if (configured.length === 0)
         throw new NoHealthyModelCandidateError(`No configured model candidate supports backend=${request.backend}, role=${request.role}, route=${request.route}, category=${request.category}, complexity=${request.complexityBand}.`);
@@ -211,11 +212,15 @@ export function selectModelCandidate(candidates, health, request) {
     const ordered = [...configured].sort((left, right) => tagScore(right) - tagScore(left) || right.priority - left.priority || left.id.localeCompare(right.id));
     const fallbackIds = new Set(configured.flatMap(({ fallbacks }) => fallbacks));
     const primary = ordered.find(({ id }) => !fallbackIds.has(id)) ?? ordered[0];
-    const plan = explicitFallbackPlan(primary, candidates, health, request);
+    return explicitFallbackPlan(primary, candidates, health, request);
+}
+export function selectModelCandidate(candidates, health, request) {
+    const plan = planModelCandidates(candidates, health, request);
+    const byId = new Map(candidates.map(candidate => [candidate.id, candidate]));
     const attempts = [];
     for (let index = 0; index < plan.orderedCandidates.length; index += 1) {
         const candidate = plan.orderedCandidates[index];
-        const source = candidates.find(({ id }) => id === candidate.candidateId);
+        const source = byId.get(candidate.candidateId);
         if (isAvailable(source, health)) {
             attempts.push({ candidate: pair(source), outcome: "selected", reason: index === 0 ? "Highest-ranked explicit candidate is available." : "Explicit same-backend fallback is available." });
             const fallbackReason = attempts.filter(({ outcome }) => outcome === "unavailable").map(({ candidate: item, reason }) => `${item.candidateId}: ${reason}`).join(" | ") || null;
