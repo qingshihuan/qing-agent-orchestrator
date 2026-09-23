@@ -5,6 +5,7 @@ on:
     paths:
       - .github/maintenance/single-owner.py
       - .github/maintenance/refine-single-owner.py
+      - .github/maintenance/finalize-single-owner.py
       - .github/workflows/prepare-single-owner.yml
 permissions:
   contents: read
@@ -28,41 +29,19 @@ jobs:
           node-version-file: .node-version
           check-latest: true
           cache: npm
-      - name: Apply guarded single-owner transformations
+      - name: Apply the previously typechecked transformations and final cancellation fix
         shell: python
         run: |
+          import subprocess, textwrap
           from pathlib import Path
-          code=Path('.github/maintenance/single-owner.py').read_text(encoding='utf-8')
-          start=code.index("change('src/cli.ts', '    \"  validate <handoff.json>\",'")
-          end=code.index('\n\n# Native instruction',start)
-          old='    "  validate <handoff.json>",'
-          new='    "  execute-single <handoff.json> --protect <spec-file> --protect <acceptance-file> --allow-real-execution [--config <file>]",\n    "       experimental: one complete worker, no manager model/retry ladder; deterministic acceptance is not independent review",\n'+old
-          code=code[:start]+f'change("src/cli.ts", {old!r}, {new!r})'+code[end:]
-          scope={}
-          exec(compile(code,'single-owner-transformations','exec'),scope)
-          change=scope['change']
-          change('src/relay.ts','pendingIndependentReview: handoff.orchestration?.independentReviewer ?? true,','pendingIndependentReview: singleOwner ? false : handoff.orchestration?.independentReviewer ?? true,')
-          change('src/relay.ts','unacceptedHighRiskArtifact: handoff.orchestration?.independentReviewer ?? true,','unacceptedHighRiskArtifact: singleOwner ? false : handoff.orchestration?.independentReviewer ?? true,')
-          before='      if (this.executor.name === "codex-exec" && handoff.testPlan.length > 0 && runHandle) {'
-          guard='''      if (singleOwner && (await options.verifyImmutableInputs?.() ?? []).length) {
-                  if (runHandle) {
-                    await runHandle.writeExecutorResult(execution, iteration);
-                    await runHandle.finalize("blocked", "blocked", iteration, "failed", "Protected inputs changed before acceptance execution.");
-                  }
-                  return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Protected inputs changed; acceptance commands were not executed." };
-                }
-          '''
-          change('src/relay.ts',before,guard+before)
-          marker='    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {'
-          change('src/relay.ts',marker,marker+'\n      if (runHandle && await runHandle.isCancelled()) return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Cancelled before implementation; no owner started." };')
-          change('tests/single-owner.test.ts','assert.equal(out.status,"BLOCKED"); assert.equal(out.attempts[0]?.review.verdict,"HUMAN_REVIEW");','assert.equal(out.status,"BLOCKED"); assert.match(out.message,/Protected inputs changed/); assert.equal(out.attempts.length,0);')
-          exec(compile(Path('.github/maintenance/refine-single-owner.py').read_text(encoding='utf-8'),'single-owner-refinements','exec'),{})
-          change('tests/single-owner.test.ts','await store.cancelRun(handle.runId,async()=>{});','await store.cancelRun(handle.runId,async()=>true);')
-          # Start retains an explicit process request, but plans it without a model by default.
-          change('src/cli.ts','    if (decision.orchestration.tier === "lite") {\n      const bundle', '    if (decision.orchestration.tier === "lite" && decision.execution.mode !== "cli-recommended") {\n      const bundle')
-          # Refuse a nonauditable workspace before the new controller spends on execution.
-          change('src/single-owner-controller.ts','import { Relay,','import { captureGitSnapshot } from "./git-audit.js";\nimport { Relay,')
-          change('src/single-owner-controller.ts','    try {\n      const before', '    try {\n      if (!(await captureGitSnapshot(handoff.workspace.root)).isGit) throw new Error("An auditable Git workspace is required before starting the single owner.");\n      const before')
+          ref='e0a5e0f12223bae85247c792f5213b87a5f98f54'
+          subprocess.run(['git','merge-base','--is-ancestor',ref,'HEAD'],check=True)
+          source=subprocess.check_output(['git','show',ref+':.github/workflows/prepare-single-owner.yml'],text=True,encoding='utf-8')
+          marker='      - name: Apply guarded single-owner transformations\n        shell: python\n        run: |\n'
+          assert source.count(marker)==1
+          code=textwrap.dedent(source.split(marker,1)[1].split('      - run: npm ci --ignore-scripts',1)[0])
+          exec(compile(code,'typechecked-single-owner-preparation','exec'),{})
+          exec(compile(Path('.github/maintenance/finalize-single-owner.py').read_text(encoding='utf-8'),'terminal-cancellation-fix','exec'),{})
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - name: Complete regression suite
@@ -74,7 +53,7 @@ jobs:
         run: |
           npm test *> "$env:RUNNER_TEMP/qing-single-owner-tests.log"
           $code = $LASTEXITCODE
-          if ($code -ne 0) { Get-Content "$env:RUNNER_TEMP/qing-single-owner-tests.log" -Tail 140; throw 'Complete suite failed; no generated source is pushed' }
+          if ($code -ne 0) { Get-Content "$env:RUNNER_TEMP/qing-single-owner-tests.log" -Tail 120; throw 'Complete suite failed; no generated source is pushed' }
           Get-Content "$env:RUNNER_TEMP/qing-single-owner-tests.log" -Tail 12
       - name: Rebuild and validate both skill editions
         env:
@@ -94,6 +73,8 @@ jobs:
           old=json.loads(subprocess.check_output(['git','show',base+':package-lock.json'],text=True))
           new=json.loads(Path('package-lock.json').read_text(encoding='utf-8'))
           assert {k:v for k,v in old['packages'].items() if k} == {k:v for k,v in new['packages'].items() if k}
+          assert new['version']=='0.14.0-dev.1'
+          assert "publish == 'true'" in Path('.github/workflows/release.yml').read_text(encoding='utf-8')
       - name: Publish validated source to this branch only
         shell: pwsh
         env:
@@ -103,7 +84,7 @@ jobs:
           if ($env:TARGET_BRANCH -ne 'codex/single-owner-v0.14' -or (git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD) { throw 'Unexpected branch/revision' }
           git add -- src tests package.json package-lock.json .agents/skills artifacts docs README.md README.en.md CHANGELOG.md
           if ($LASTEXITCODE -ne 0) { throw 'Staging failed' }
-          git rm -- .github/maintenance/single-owner.py .github/maintenance/refine-single-owner.py .github/workflows/prepare-single-owner.yml
+          git rm -- .github/maintenance/single-owner.py .github/maintenance/refine-single-owner.py .github/maintenance/finalize-single-owner.py .github/workflows/prepare-single-owner.yml
           if ($LASTEXITCODE -ne 0) { throw 'Helper removal failed' }
           git diff --cached --stat
           git config user.name 'github-actions[bot]'
