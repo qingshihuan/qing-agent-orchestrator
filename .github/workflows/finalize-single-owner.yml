@@ -65,7 +65,7 @@ jobs:
               const out=await new NodeProcessRunner().run({command:process.execPath,args:["dist/src/cli.js","start","--task","使用 CLI 实现一个本地功能","--workspace",h.workspace.root,"--config",config,"--out",handoff],cwd:process.cwd(),stdin:"",timeoutMs:20000,maxOutputBytes:300000});
               assert.equal(out.exitCode,0,out.stderr);
               const d=JSON.parse(out.stdout);
-              assert.equal(d.plannerSource,"local");
+              assert.equal(d.plannerSource,"local-fallback");
               assert.equal(d.modelSelection,null);
               assert.ok(JSON.parse(await readFile(handoff,"utf8")).testPlan.length>0);
             });
