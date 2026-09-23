@@ -25,6 +25,58 @@ jobs:
           cache: npm
       - name: Apply scoped source and instruction changes
         run: python .github/maintenance/host-permissions.py
+      - name: Preserve ownership contract and align native references
+        shell: python
+        run: |
+          from pathlib import Path
+          def replace(path, old, new):
+              p=Path(path); s=p.read_text(encoding='utf-8')
+              assert s.count(old)==1,(path,old,s.count(old))
+              p.write_bytes(s.replace(old,new,1).encode('utf-8'))
+          replace('src/native-permissions.ts','routingDecisionOwner:','routingDecisionMaker:')
+          replace('tests/host-permissions.test.ts',
+                  'source.runtime.stateDirectory=join(directory,"runs");',
+                  'source.runtime = { ...(source.runtime ?? {}), stateDirectory: join(directory,"runs") };\n    source.security ??= { approvedGateIds: [] };')
+          standard='''# Handoff protocol 1.0
+
+          A Handoff is the Full-tier operation contract, not a universal prerequisite. Direct needs none. Lite uses a compact child brief with objective, allowed paths, constraints, deliverables and targeted checks. Qing decides the tier, not the user.
+
+          For Full validate `schemas/handoff.schema.json`. Include stable ID, objective/category, exact workspace and relative allowed paths, inputs, preservation constraints, acceptance criteria, every operation, deliverables, tests and bounded iterations. A plan is not permission and is not an extra approval step.
+
+          Native parent/children use the CURRENT effective host permissions and exact task authorization described in [safety-gates.md](safety-gates.md). Preserve the effect report. REQUIRE_APPROVAL means evaluate whether the existing task authorization and host grant cover that effect; it does not require a second Qing gate-ID prompt. Use the native host channel only for a genuine missing approval. DENY and unknown permission states never become grants.
+
+          Operations include read, write, delete, execute_tests, install_dependency, network_read, network_access, use_secret, external_message, git_commit, git_push, production_deploy, database_migration, global_write, purchase and scope_expansion. Describe read-only network reads separately from authenticated/private/state-changing access. The host enforces its current network and connector policies; a URL or repository entry does not prove authorization. Never place a secret value in the contract.
+
+          A new Full Handoff records orchestration tier, child/revision budgets and independent-review requirements. Keep the configured cap and at most maxRevisions + 1 execution iterations. Revisions preserve scope and still-valid authorization; changed target, data, privilege or effect requires renewed scope/host evaluation, not another confirmation when already covered. A host denial cannot be bypassed through another backend.
+          '''
+          full='''# Handoff protocol
+
+          Use a structured Handoff for Full; Direct needs none, Lite normally uses a compact child brief. Include stable ID, objective/category, exact workspace and relative allowed paths, constraints, acceptance criteria and owners, every operation/effect, deliverables, tests and bounded iterations. Preserve independent review and the minimum contract/config/Handoff iteration cap.
+
+          ## Native parent and children
+          Follow the native policy in [safety-gates.md](safety-gates.md). The Handoff is a scope/evidence contract, not an approval dialog. Reuse exact user-task authorization and the host's current effective permissions. Preserve pending effect reports for host assessment; never convert unknown or denied authority to ALLOW. Ask only through the actual host channel for an uncovered requirement, not a separate Qing gate-ID question. Classify read-only network access separately from authenticated/private/state-changing access and respect the host's live policies.
+
+          ## Standalone Relay
+          The separate process has no trusted desktop permission bridge. Use the existing process Schema, execution opt-in and exact effect gates. Project reads/writes/tests and network_read on the runtime's exact reviewed-host allowlist can pass local checks; unlisted/authenticated network access, deletion, secrets, external writes, push, deployment, destructive migration, global_write, purchase and scope_expansion retain their existing gates. An already-authorized exact grant may be conveyed by the trusted host caller; the Handoff must not manufacture it. This process policy is not a duplicate native approval screen.
+
+          New targets, data, permissions or effects require a revised scope contract and the applicable native-host or standalone evaluation. Never include secret values, expand the budget implicitly, or bypass a denial by changing backend.
+          '''
+          import textwrap
+          Path('.agents/skills/qing-agent-orchestrator/references/handoff-protocol.md').write_bytes(textwrap.dedent(standard).encode('utf-8'))
+          Path('.agents/skills/qing-agent-orchestrator-full/references/handoff-protocol.md').write_bytes(textwrap.dedent(full).encode('utf-8'))
+          p=Path('tests/host-permissions.test.ts')
+          extra='''
+          test("Handoff references distinguish native host assessment from standalone grants",async()=>{
+            const standard=await readFile(".agents/skills/qing-agent-orchestrator/references/handoff-protocol.md","utf8");
+            const full=await readFile(".agents/skills/qing-agent-orchestrator-full/references/handoff-protocol.md","utf8");
+            assert.match(standard,/does not require a second Qing gate-ID prompt/);
+            assert.match(standard,/DENY and unknown permission states never become grants/);
+            assert.match(full,/## Native parent and children/);
+            assert.match(full,/## Standalone Relay/);
+            assert.match(full,/must not manufacture/);
+          });
+          '''
+          p.write_bytes((p.read_text(encoding='utf-8')+'\n'+textwrap.dedent(extra)).encode('utf-8'))
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - name: Run every regression test
