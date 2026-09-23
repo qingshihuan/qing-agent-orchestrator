@@ -1,0 +1,105 @@
+name: Finalize single-owner architecture
+on:
+  push:
+    branches: [codex/single-owner-v0.14]
+    paths: [.github/workflows/finalize-single-owner.yml]
+permissions:
+  contents: read
+jobs:
+  finalize:
+    if: github.repository == 'qingshihuan/qing-agent-orchestrator' && github.actor == 'qingshihuan'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          check-latest: true
+          cache: npm
+      - name: Close automatic partial delegation and retain coverage
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess, textwrap
+          subprocess.run(['git','merge-base','--is-ancestor','5552b517b1aa356c0a14ef3d0d722f4130dfaf1c','HEAD'],check=True)
+          def change(path,old,new):
+              p=Path(path); s=p.read_text(encoding='utf-8')
+              assert s.count(old)==1,(path,old,s.count(old))
+              p.write_bytes(s.replace(old,new,1).encode('utf-8'))
+          change('src/delegation-benefit.ts','  const parallelSlice = evidence.boundary === "independent-slice" && evidence.parentWork === "independent-work";\n  return whole || parallelSlice','  // Keep legacy evidence readable; a slice does not establish whole-task transfer.\n  // Parallel ownership is intentionally disabled pending connected evidence.\n  return whole')
+          change('tests/parent-overhead.test.ts','a substantial slice is useful only while the parent does disjoint work','a substantial slice does not bypass the single-owner whole-task policy')
+          change('tests/parent-overhead.test.ts','boundary: "independent-slice", parentWork: "independent-work" }).worthwhile, true','boundary: "independent-slice", parentWork: "independent-work" }).worthwhile, false')
+          p=Path('tests/single-owner.test.ts')
+          extra='''
+          test("legacy independent-slice evidence cannot reactivate split implementation",()=>{
+            const d=routeTask("实现模块",{delegationEvidence:{boundary:"independent-slice",contract:"fixed",acceptance:"ready",work:"substantial",parentWork:"independent-work"}});
+            assert.equal(d.orchestration.tier,"direct");
+            assert.equal(d.executionPlan.implementationMode,"current-parent");
+            assert.equal(d.orchestration.childAgentBudget,0);
+          });
+          test("real Full dispatch keeps the parent as implementer and allocates only independent review",async()=>{
+            const { NodeProcessRunner }=await import("../src/process-runner.js");
+            await fixture(async(_root,h)=>{
+              const out=await new NodeProcessRunner().run({command:process.execPath,args:["dist/src/cli.js","dispatch","--task","使用完整 Qing 实现一个本地功能","--workspace",h.workspace.root,"--config","config/relay.example.json","--no-model-probe"],cwd:process.cwd(),stdin:"",timeoutMs:20000,maxOutputBytes:300000});
+              assert.equal(out.exitCode,0,out.stderr);
+              const d=JSON.parse(out.stdout);
+              assert.equal(d.executionPlan.implementationMode,"current-parent");
+              assert.equal(d.executionPlan.verification,"independent-review");
+              assert.equal(d.modelSelection,null);
+              assert.equal(d.delegationInvocation,null);
+              assert.equal(d.reviewerModelSelection.role,"reviewer");
+            });
+          });
+          test("implicit process planning creates a local scaffold without a manager-model executable",async()=>{
+            const { NodeProcessRunner }=await import("../src/process-runner.js");
+            await fixture(async(root,h)=>{
+              const config=join(root,"local-planner.json");
+              const handoff=join(root,"planned.json");
+              await writeFile(config,JSON.stringify({executor:{codexExec:{command:"qing-manager-model-must-not-run"}}}));
+              const out=await new NodeProcessRunner().run({command:process.execPath,args:["dist/src/cli.js","start","--task","使用 CLI 实现一个本地功能","--workspace",h.workspace.root,"--config",config,"--out",handoff],cwd:process.cwd(),stdin:"",timeoutMs:20000,maxOutputBytes:300000});
+              assert.equal(out.exitCode,0,out.stderr);
+              const d=JSON.parse(out.stdout);
+              assert.equal(d.plannerSource,"local");
+              assert.equal(d.modelSelection,null);
+              assert.ok(JSON.parse(await readFile(handoff,"utf8")).testPlan.length>0);
+            });
+          });
+          '''
+          p.write_bytes((p.read_text(encoding='utf-8')+'\n'+textwrap.dedent(extra)).encode('utf-8'))
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Run all tests and print only the final result or failures
+        shell: pwsh
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          npm test *> "$env:RUNNER_TEMP/single-owner-final-tests.log"
+          if ($LASTEXITCODE -ne 0) { Get-Content "$env:RUNNER_TEMP/single-owner-final-tests.log" -Tail 100; throw 'Complete suite failed' }
+          Get-Content "$env:RUNNER_TEMP/single-owner-final-tests.log" -Tail 12
+      - name: Rebuild and validate candidate archives
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/single-final-${{ github.run_id }}"
+      - run: python scripts/smoke-release-packages.py --expected-node 24
+      - name: Preserve matched artifacts and remove this helper
+        shell: pwsh
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          if ($env:TARGET_BRANCH -ne 'codex/single-owner-v0.14') { throw 'Unexpected branch' }
+          git add -- src/delegation-benefit.ts tests/parent-overhead.test.ts tests/single-owner.test.ts .agents/skills/qing-agent-orchestrator-full/runtime artifacts
+          if ($LASTEXITCODE -ne 0) { throw 'Staging failed' }
+          git rm -- .github/workflows/finalize-single-owner.yml
+          if ($LASTEXITCODE -ne 0) { throw 'Helper removal failed' }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Enforce whole-task transfer and verify native review-only and local-planning paths'
+          if ($LASTEXITCODE -ne 0) { throw 'Commit failed' }
+          git push origin "HEAD:refs/heads/$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Push failed; no force push permitted' }
