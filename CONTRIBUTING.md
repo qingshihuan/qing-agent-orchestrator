@@ -31,3 +31,6 @@
 涉及删除、密钥、外部消息、push、部署、数据库迁移、全局安装或真实执行时，必须保留真实授权边界。原生模式复用宿主已经授予的精确权限与任务授权，不新增重复 Qing 弹窗；独立 Relay 的效果 gate 不由原生元数据绕过。不要在 issue、日志、Handoff 或测试夹具中提交真实密钥。
 
 安全漏洞请按 `SECURITY.md` 的私密报告流程处理。
+
+## Node.js compatibility
+Use Node.js 24 LTS for local builds (see `.node-version`). CI must pass on Windows/Linux with Node.js 22, 24 and 26, including the shipped-package smoke check. Node 22 types remain the lowest supported API baseline. Do not claim compatibility from `engines` alone or skip a failing newest-version job. Python is required only for CI/development package smoke checks, not installed skills.

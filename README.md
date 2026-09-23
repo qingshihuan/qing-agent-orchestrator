@@ -1,5 +1,9 @@
 # 青-Agent-Orchestrator
 
+## v0.12.0 — Node.js 最新版兼容
+
+Windows/Linux × Node.js 22、24、26 完整测试；统一以 24 LTS 构建，并直接验证发布 ZIP。最低运行时声明为 22，标准版仍不需要 Node.js。 [Details](docs/node-support.md) · [Release](docs/release-notes-v0.12.0.md)
+
 ## v0.11.0 — Host-native permissions
 
 Qing 自动决定直接完成或委派，原生调用复用宿主当前权限与已授权任务范围，不再重复询问计划、模型或路由。独立 CLI 保留自己的授权边界。 [Details](docs/host-permissions.md) · [Release](docs/release-notes-v0.11.0.md)
@@ -12,7 +16,7 @@ Qing 自动决定直接完成或委派，原生调用复用宿主当前权限与
 
 Astra 按需启用而非全局默认；紧凑执行上下文、分层读取规则、定向缓存预检和增量日志减少重复工作。完整验收和效果审批不变。 See [v0.9.0](docs/release-notes-v0.9.0.md).
 
-[English](README.en.md) · [v0.11.0 发布说明](docs/release-notes-v0.11.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
+[English](README.en.md) · [v0.12.0 发布说明](docs/release-notes-v0.12.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
 **让擅长理解、规划和沟通的模型先把事情想清楚，让擅长代码与工程执行的 Codex 完成实现与验证。**
 
@@ -185,7 +189,7 @@ SDK/API 集成会作为后续可选分支，不改变面向大多数订阅用户
 
 ## 开发与验证
 
-需要 Node.js 18 或更新版本：
+开发与可选 Relay 推荐 Node.js 24 LTS；CI 覆盖 22、24、26，最低声明为 22。标准版不需要 Node.js：
 
 ```powershell
 npm install
