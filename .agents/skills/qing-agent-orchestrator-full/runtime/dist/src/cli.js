@@ -16,6 +16,7 @@ import { terminateProcessTree } from "./process-runner.js";
 import { evaluateSafetyGate } from "./safety-gate.js";
 import { ModelHealthChecker } from "./model-health.js";
 import { selectModelCandidate } from "./model-router.js";
+import { TaskModelScheduler } from "./model-scheduler.js";
 import { analyzeTaskComplexity } from "./task-analyzer.js";
 import { createPendingDispatchHandoff, routeTask } from "./task-router.js";
 import { respondToCliRecommendation } from "./execution-mode-router.js";
@@ -118,7 +119,7 @@ async function readHandoff(path) {
     return result.value;
 }
 function codexOptions(config, bundle) {
-    return { ...config.executor.codexExec, runtimeRoot, ...(bundle ? { modelSelection: bundle.selection, modelHealth: bundle.health } : {}) };
+    return { ...config.executor.codexExec, runtimeRoot, ...(bundle ? { modelSelection: bundle.selection, modelHealth: bundle.health, prepareModelFallback: (selection, reason) => taskModelScheduler(config).prepareFallback(selection, reason) } : {}) };
 }
 function plannerOptions(config, bundle) {
     return {
@@ -127,6 +128,24 @@ function plannerOptions(config, bundle) {
         handoffSchemaPath: "schemas/planner-output.schema.json",
         ...(bundle ? { modelSelection: bundle.selection } : {}),
     };
+}
+const taskSchedulers = new WeakMap();
+function taskModelScheduler(config) {
+    let scheduler = taskSchedulers.get(config);
+    if (!scheduler) {
+        scheduler = new TaskModelScheduler(config.modelRouting.candidates, new ModelHealthChecker({
+            command: config.executor.codexExec.command,
+            cwd: runtimeRoot,
+            schemaPath: resolve(runtimeRoot, "schemas/model-health.schema.json"),
+            timeoutMs: config.modelRouting.probeTimeoutMs,
+            ttlMs: config.modelRouting.healthTtlMs,
+            ephemeral: config.executor.codexExec.ephemeral,
+            ignoreUserConfig: config.executor.codexExec.ignoreUserConfig,
+            cachePath: resolve(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory), "model-health-cache-v1.json"),
+        }));
+        taskSchedulers.set(config, scheduler);
+    }
+    return scheduler;
 }
 async function configuredModel(config, role, backend, task, decision) {
     if (config.modelRouting.mode === "inherit")
@@ -145,50 +164,7 @@ async function configuredModel(config, role, backend, task, decision) {
             health: [],
         };
     }
-    const checker = new ModelHealthChecker({
-        command: config.executor.codexExec.command,
-        cwd: runtimeRoot,
-        schemaPath: resolve(runtimeRoot, "schemas/model-health.schema.json"),
-        timeoutMs: config.modelRouting.probeTimeoutMs,
-        ttlMs: config.modelRouting.healthTtlMs,
-        ephemeral: config.executor.codexExec.ephemeral,
-        ignoreUserConfig: config.executor.codexExec.ignoreUserConfig,
-        cachePath: resolve(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory), "model-health-cache-v1.json"),
-    });
-    const relevant = config.modelRouting.candidates.filter((candidate) => candidate.enabled
-        && candidate.backend === "codex-cli"
-        && candidate.roles.includes(role)
-        && candidate.routes.includes(decision.route)
-        && candidate.complexityBands.includes(complexityBand)
-        && (candidate.categories.length === 0 || candidate.categories.includes(decision.category)));
-    const byCandidate = new Map(config.modelRouting.candidates.map((candidate) => [candidate.id, candidate]));
-    const fallbackIds = new Set(relevant.flatMap(({ fallbacks }) => fallbacks));
-    const primary = [...relevant]
-        .filter(({ id }) => !fallbackIds.has(id))
-        .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))[0]
-        ?? [...relevant].sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))[0];
-    if (!primary)
-        throw new Error(`No configured CLI candidate supports ${role}/${decision.route}/${decision.category}/${complexityBand}.`);
-    const health = [];
-    const queue = [primary];
-    const visited = new Set();
-    while (queue.length > 0) {
-        const candidate = queue.shift();
-        if (visited.has(candidate.id))
-            continue;
-        visited.add(candidate.id);
-        const observed = await checker.check(candidate);
-        health.push(observed);
-        if (observed.state === "healthy")
-            break;
-        for (const fallbackId of candidate.fallbacks) {
-            const fallback = byCandidate.get(fallbackId);
-            if (fallback && relevant.some(({ id }) => id === fallback.id))
-                queue.push(fallback);
-        }
-    }
-    const byId = new Map(health.map((observed) => [observed.candidateId, observed]));
-    return { selection: selectModelCandidate(config.modelRouting.candidates, byId, { backend, role, route: decision.route, category: decision.category, complexityBand }), health };
+    return taskModelScheduler(config).select({ backend, role, route: decision.route, category: decision.category, complexityBand });
 }
 function desktopDelegationContract(selection) {
     return {

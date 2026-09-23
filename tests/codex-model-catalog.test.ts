@@ -5,7 +5,7 @@ import { parseCodexModelCatalog, validateCandidateAgainstCatalog } from "../src/
 const catalogJson = JSON.stringify({
   models: [
     {
-      slug: "gpt-5.6-sol",
+      slug: "gpt-6-sol",
       supported_reasoning_levels: [
         { effort: "low" },
         { effort: "medium" },
@@ -21,8 +21,8 @@ const catalogJson = JSON.stringify({
 
 test("bundled catalog parser retains exact model, effort, and minimum-version capabilities", () => {
   const catalog = parseCodexModelCatalog(catalogJson);
-  assert.deepEqual(catalog.models.get("gpt-5.6-sol"), {
-    slug: "gpt-5.6-sol",
+  assert.deepEqual(catalog.models.get("gpt-6-sol"), {
+    slug: "gpt-6-sol",
     supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
     minimalClientVersion: "0.144.0",
   });
@@ -30,7 +30,7 @@ test("bundled catalog parser retains exact model, effort, and minimum-version ca
 
 test("catalog validation accepts an advertised pair and rejects absent models, efforts, and old clients", () => {
   const catalog = parseCodexModelCatalog(catalogJson);
-  const candidate = { backend: "codex-cli" as const, model: "gpt-5.6-sol", reasoningEffort: "ultra" as const };
+  const candidate = { backend: "codex-cli" as const, model: "gpt-6-sol", reasoningEffort: "ultra" as const };
   assert.equal(validateCandidateAgainstCatalog(candidate, catalog, "codex-cli 0.144.0"), null);
   assert.match(validateCandidateAgainstCatalog({ ...candidate, model: "not-real" }, catalog, "codex-cli 0.144.0") ?? "", /absent/);
   assert.match(validateCandidateAgainstCatalog({ ...candidate, reasoningEffort: "minimal" }, catalog, "codex-cli 0.144.0") ?? "", /unsupported/);

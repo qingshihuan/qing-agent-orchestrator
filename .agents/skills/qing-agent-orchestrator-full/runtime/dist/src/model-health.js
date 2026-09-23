@@ -88,7 +88,7 @@ export class ModelHealthChecker {
         const fingerprint = candidateFingerprint(candidate, cliVersion);
         const now = (this.options.now ?? Date.now)();
         const cached = this.cache.get(fingerprint);
-        if (!force && cached?.expiresAt && Date.parse(cached.expiresAt) > now)
+        if (!force && cached?.checkedAt && cached.expiresAt && Date.parse(cached.checkedAt) <= now && now - Date.parse(cached.checkedAt) < this.options.ttlMs && Date.parse(cached.expiresAt) > now)
             return { ...cached, candidateId: candidate.id, cacheState: "cached" };
         const current = this.pending.get(fingerprint);
         if (current)
@@ -96,6 +96,19 @@ export class ModelHealthChecker {
         const task = this.validateCatalogThenProbe(candidate, cliVersion, fingerprint, now).finally(() => this.pending.delete(fingerprint));
         this.pending.set(fingerprint, task);
         return task;
+    }
+    async invalidateAfterRejection(candidate, reason) {
+        if (candidate.backend !== "codex-cli" || validateModelCapability(candidate)) {
+            throw new Error("Cannot invalidate an unsupported model candidate.");
+        }
+        const cliVersion = await this.cliVersion();
+        const now = (this.options.now ?? Date.now)();
+        await this.storeRecord({
+            candidateId: candidate.id, fingerprint: candidateFingerprint(candidate, cliVersion), cliVersion,
+            state: "unhealthy", cacheState: "fresh", checkedAt: new Date(now).toISOString(),
+            expiresAt: new Date(now + Math.min(this.options.ttlMs, 60_000)).toISOString(),
+            failure: "capability", reason: "Runtime model rejection: " + redactSensitiveText(reason).slice(0, 600),
+        });
     }
     status(candidate) {
         if (!candidate.enabled)

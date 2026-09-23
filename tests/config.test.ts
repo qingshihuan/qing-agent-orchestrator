@@ -55,7 +55,7 @@ test("desktop standard skill source contains no CLI launcher or runtime material
 test("strict model routing accepts catalog-validated CLI pairs and rejects unsafe configuration", async () => {
   const directory = await mkdtemp(join(tmpdir(), "qing-model-config-"));
   const baseCandidate = {
-    id: "primary", backend: "codex-cli", model: "gpt-5.6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent",
+    id: "primary", backend: "codex-cli", model: "gpt-6-sol", profile: "work", reasoningEffort: "high", availability: "entitlement-dependent",
     roles: ["planner", "executor"], routes: ["codex", "hybrid"], categories: ["code_change"], complexityBands: ["complex"], tags: [],
     priority: 10, enabled: true, fallbacks: ["fallback"],
   };
@@ -69,8 +69,7 @@ test("strict model routing accepts catalog-validated CLI pairs and rejects unsaf
     const maximum = await loadConfig(await write("max.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, reasoningEffort: "max", fallbacks: [] }] } }));
     assert.equal(maximum.modelRouting.candidates[0]?.reasoningEffort, "max");
 
-    const futureCatalogModel = await loadConfig(await write("future.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, model: "future-catalog-model", reasoningEffort: "ultra", fallbacks: [] }] } }));
-    assert.equal(futureCatalogModel.modelRouting.candidates[0]?.model, "future-catalog-model");
+    await assert.rejects(loadConfig(await write("future.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, model: "future-catalog-model", reasoningEffort: "ultra", fallbacks: [] }] } })), /GPT-6 task-model policy/);
 
     await assert.rejects(loadConfig(await write("unknown.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, provider: "forbidden" }] } })), /unknown or forbidden fields.*provider/);
     await assert.rejects(loadConfig(await write("secret.json", { apiKey: "secret" })), /unknown or forbidden fields.*apiKey/);
@@ -78,7 +77,7 @@ test("strict model routing accepts catalog-validated CLI pairs and rejects unsaf
     await assert.rejects(loadConfig(await write("duplicate.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, baseCandidate] } })), /duplicate IDs/);
     await assert.rejects(loadConfig(await write("dangling.json", { modelRouting: { mode: "explicit", candidates: [{ ...baseCandidate, fallbacks: ["missing"] }] } })), /dangling fallback/);
     await assert.rejects(loadConfig(await write("cycle.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, { ...baseCandidate, id: "fallback", fallbacks: ["primary"] }] } })), /fallback cycle/);
-    await assert.rejects(loadConfig(await write("cross-backend.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, { ...baseCandidate, id: "fallback", backend: "desktop-child", model: "gpt-5.6-sol", profile: null, availability: "host-advertised", fallbacks: [] }] } })), /crosses model backends/);
+    await assert.rejects(loadConfig(await write("cross-backend.json", { modelRouting: { mode: "explicit", candidates: [baseCandidate, { ...baseCandidate, id: "fallback", backend: "desktop-child", model: "gpt-6-sol", profile: null, availability: "host-advertised", fallbacks: [] }] } })), /crosses model backends/);
     await assert.rejects(loadConfig(await write("inherit-candidate.json", { modelRouting: { mode: "inherit", candidates: [{ ...baseCandidate, fallbacks: [] }] } })), /inherit never silently selects/);
   } finally {
     await rm(directory, { recursive: true, force: true });

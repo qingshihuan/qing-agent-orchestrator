@@ -36,6 +36,6 @@ test("v0.7 compact dispatch preserves control facts while reducing output", asyn
   const medium = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", mediumTask, "--workspace", process.cwd(), "--config", "config/relay.example.json", "--no-model-probe", "--compact"] });
   const output = JSON.parse(medium.stdout) as { tier: string; model: { model: string; reasoningEffort: string } };
   assert.equal(output.tier, "lite");
-  assert.equal(output.model.model, "gpt-5.6-luna");
+  assert.equal(output.model.model, "gpt-6-luna");
   assert.equal(output.model.reasoningEffort, "medium");
 });

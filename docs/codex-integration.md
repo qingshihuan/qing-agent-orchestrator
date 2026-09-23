@@ -92,3 +92,9 @@ Executor 返回后，声明的 testPlan 由 Relay 父进程独立执行并绑定
 ## v0.9 low-overhead operation
 Prefer `--compact` for agent-facing dispatch/start. Use `models probe --candidate cli-astra-demanding` only after enabling/configuring that candidate; health checks reuse the shared persistent cache. `--force` refreshes health explicitly, not on every task. Astra requires CLI 0.153.0 or newer, a matching local catalog and successful account preflight. No installation or login is performed automatically.
 `logs <run-id> --after 0 --limit 20 --compact` returns `{events,nextAfter,hasMore}`. Continue with nextAfter only when more evidence is needed; never mistake a partial page for the full journal. Without page flags the legacy full array remains available. Both ZIPs have updated instruction contracts; back up customized configuration before installing.
+
+## v0.10 GPT-6-only scheduling
+
+Explicit candidates must use gpt-6-luna, gpt-6-sol or gpt-6-astra; unknown and retired models fail before submission. Migrate old saved configurations rather than silently renaming their model IDs. The runtime's safe inherit default does not control the parent's model.
+
+The CLI now shares one task scheduler per loaded configuration instance. It uses the exact selector chain, performs no speculative backup probes, and only preflights remaining fallbacks after an explicit selected-model runtime rejection. Authentication, task, cancellation, protocol, schema and timeout errors are not model-fallback triggers. Rejected-model health is invalidated for at most 60 seconds; explicit force refresh remains possible. Permission/profile/scope checks still apply. Sol/Luna minimum versions come from the installed catalog, not an invented fixed floor. See release-notes-v0.10.0.md.

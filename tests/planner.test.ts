@@ -8,7 +8,7 @@ import type { ProcessRequest, ProcessResult, ProcessRunner } from "../src/proces
 import type { ModelSelection } from "../src/types.js";
 
 function plannerModelSelection(): ModelSelection {
-  const plannedPair = { candidateId: "planner-primary", backend: "codex-cli" as const, model: "gpt-5.6-sol", profile: "work", reasoningEffort: "xhigh" as const };
+  const plannedPair = { candidateId: "planner-primary", backend: "codex-cli" as const, model: "gpt-6-sol", profile: "work", reasoningEffort: "xhigh" as const };
   return {
     executionOwner: "Codex",
     ...plannedPair,
@@ -394,7 +394,7 @@ test("planner propagates an explicitly selected model, profile, and reasoning ef
     const runner = new PlannerRunner();
     await new CodexHandoffPlanner(plannerOptions(runtime, { modelSelection: plannerModelSelection() }), runner).plan("Inspect", workspace);
     const args = runner.requests[2]!.args;
-    assert.equal(args[args.indexOf("-m") + 1], "gpt-5.6-sol");
+    assert.equal(args[args.indexOf("-m") + 1], "gpt-6-sol");
     assert.equal(args[args.indexOf("--profile") + 1], "work");
     assert.equal(args[args.lastIndexOf("-c") + 1], 'model_reasoning_effort="xhigh"');
     assert.equal(args[args.indexOf("--sandbox") + 1], "read-only");

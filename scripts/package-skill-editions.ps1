@@ -190,6 +190,11 @@ $safeConfig = @'
 $safeConfig = $safeConfig.Replace("`r`n", "`n").Replace("`r", "`n")
 [System.IO.File]::WriteAllText((Join-Path $runtimeRoot "config\relay.user.json"), $safeConfig, [System.Text.UTF8Encoding]::new($false))
 
+# Ship an explicit GPT-6 preset separately; never overwrite relay.user.json.
+$gpt6Preset = [System.IO.File]::ReadAllText((Join-Path $projectRoot "config/relay.example.json"))
+$gpt6Preset = $gpt6Preset.Replace("`r`n", "`n").Replace("`r", "`n")
+[System.IO.File]::WriteAllText((Join-Path $runtimeRoot "config/relay.gpt6.json"), $gpt6Preset, [System.Text.UTF8Encoding]::new($false))
+
 $standardZip = Join-Path $artifactsRoot "qing-agent-orchestrator-standard.zip"
 $fullZip = Join-Path $artifactsRoot "qing-agent-orchestrator-full.zip"
 New-DeterministicZip $standardRoot $standardZip
@@ -321,6 +326,7 @@ if ($Validate) {
       Get-RelativeFileList (Join-Path $projectRoot "dist\src") | ForEach-Object { "runtime/dist/src/$_" }
       Get-RelativeFileList (Join-Path $projectRoot "schemas") | ForEach-Object { "runtime/schemas/$_" }
       "runtime/config/relay.user.json"
+      "runtime/config/relay.gpt6.json"
       "runtime/package.json"
     )
     $expectedFullFiles = @($declaredFullSkillFiles + $generatedRuntimeFiles | Sort-Object)
@@ -329,6 +335,9 @@ if ($Validate) {
     foreach ($relativePath in $expectedFullFiles) {
       $sourcePath = if ($relativePath.StartsWith("runtime/dist/src/")) {
         Join-Path (Join-Path $projectRoot "dist\src") $relativePath.Substring("runtime/dist/src/".Length).Replace("/", "\")
+      }
+      elseif ($relativePath -eq "runtime/config/relay.gpt6.json") {
+        Join-Path $projectRoot "config/relay.example.json"
       }
       elseif ($relativePath.StartsWith("runtime/schemas/")) {
         Join-Path (Join-Path $projectRoot "schemas") $relativePath.Substring("runtime/schemas/".Length).Replace("/", "\")
