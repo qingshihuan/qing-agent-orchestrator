@@ -172,3 +172,38 @@ test("proposed undeclared effects block before any acceptance command",async()=>
     await assert.rejects(readFile(join(h.workspace.root,"unexpected-test.txt")));
   });
 });
+
+
+test("legacy independent-slice evidence cannot reactivate split implementation",()=>{
+  const d=routeTask("实现模块",{delegationEvidence:{boundary:"independent-slice",contract:"fixed",acceptance:"ready",work:"substantial",parentWork:"independent-work"}});
+  assert.equal(d.orchestration.tier,"direct");
+  assert.equal(d.executionPlan.implementationMode,"current-parent");
+  assert.equal(d.orchestration.childAgentBudget,0);
+});
+test("real Full dispatch keeps the parent as implementer and allocates only independent review",async()=>{
+  const { NodeProcessRunner }=await import("../src/process-runner.js");
+  await fixture(async(_root,h)=>{
+    const out=await new NodeProcessRunner().run({command:process.execPath,args:["dist/src/cli.js","dispatch","--task","使用完整 Qing 实现一个本地功能","--workspace",h.workspace.root,"--config","config/relay.example.json","--no-model-probe"],cwd:process.cwd(),stdin:"",timeoutMs:20000,maxOutputBytes:300000});
+    assert.equal(out.exitCode,0,out.stderr);
+    const d=JSON.parse(out.stdout);
+    assert.equal(d.executionPlan.implementationMode,"current-parent");
+    assert.equal(d.executionPlan.verification,"independent-review");
+    assert.equal(d.modelSelection,null);
+    assert.equal(d.delegationInvocation,null);
+    assert.equal(d.reviewerModelSelection.role,"reviewer");
+  });
+});
+test("implicit process planning creates a local scaffold without a manager-model executable",async()=>{
+  const { NodeProcessRunner }=await import("../src/process-runner.js");
+  await fixture(async(root,h)=>{
+    const config=join(root,"local-planner.json");
+    const handoff=join(root,"planned.json");
+    await writeFile(config,JSON.stringify({executor:{codexExec:{command:"qing-manager-model-must-not-run"}}}));
+    const out=await new NodeProcessRunner().run({command:process.execPath,args:["dist/src/cli.js","start","--task","使用 CLI 实现一个本地功能","--workspace",h.workspace.root,"--config",config,"--out",handoff],cwd:process.cwd(),stdin:"",timeoutMs:20000,maxOutputBytes:300000});
+    assert.equal(out.exitCode,0,out.stderr);
+    const d=JSON.parse(out.stdout);
+    assert.equal(d.plannerSource,"local-fallback");
+    assert.equal(d.modelSelection,null);
+    assert.ok(JSON.parse(await readFile(handoff,"utf8")).testPlan.length>0);
+  });
+});

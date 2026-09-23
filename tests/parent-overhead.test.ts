@@ -51,8 +51,8 @@ test("blocked, duplicate or dominant parent work rejects a cheap-child-only argu
     assert.equal(assessDelegationBenefit("实现模块", { ...evidence, parentWork }).worthwhile, false);
   }
 });
-test("a substantial slice is useful only while the parent does disjoint work", () => {
-  assert.equal(assessDelegationBenefit("实现模块", { ...evidence, boundary: "independent-slice", parentWork: "independent-work" }).worthwhile, true);
+test("a substantial slice does not bypass the single-owner whole-task policy", () => {
+  assert.equal(assessDelegationBenefit("实现模块", { ...evidence, boundary: "independent-slice", parentWork: "independent-work" }).worthwhile, false);
   assert.equal(assessDelegationBenefit("实现模块", { ...evidence, boundary: "independent-slice" }).worthwhile, false);
   assert.equal(assessDelegationBenefit("实现模块", { ...evidence, boundary: "coupled" }).worthwhile, false);
 });

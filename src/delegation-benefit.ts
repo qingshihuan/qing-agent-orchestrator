@@ -31,8 +31,9 @@ export function assessDelegationBenefit(text: string, evidence?: DelegationEvide
     return { worthwhile: false, reason: "delegation-contract-or-work-insufficient" };
   }
   const whole = evidence.boundary === "whole-task" && evidence.parentWork === "integration-only";
-  const parallelSlice = evidence.boundary === "independent-slice" && evidence.parentWork === "independent-work";
-  return whole || parallelSlice
+  // Keep legacy evidence readable; a slice does not establish whole-task transfer.
+  // Parallel ownership is intentionally disabled pending connected evidence.
+  return whole
     ? { worthwhile: true, reason: "substantial-independent-deliverable" }
     : { worthwhile: false, reason: "parent-coordination-would-dominate" };
 }
