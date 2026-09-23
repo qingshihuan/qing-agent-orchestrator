@@ -1,60 +1,15 @@
-# Adaptive orchestration specification
+# Single-owner execution
 
-## Tier decision
+Topology, verification and authority are independent decisions. Default: current capable parent does the complete work. Whole-task transfer is justified only by a fixed complete contract, acceptance and an established useful alternative; unknown economics stays with the current owner. Safe parallel/cross-system wording alone cannot create Full. Parallel implementation is disabled by default pending matched performance evidence.
 
-Choose the smallest tier that preserves quality and safety.
+For transfer, send one worker the original task, relevant paths, immutable specs/tests and exact commands. It owns implementation and debugging through terminal return. Parent does not implement another half or consume progress transcripts. No nested team. On terminal success, independently check the diff and required acceptance; do not repeat an unchanged full suite merely to produce another transcript. On a real defect choose one bounded repair/takeover only after the old owner stopped; do not overlap writes or walk a model ladder. Existing revision limits remain upper bounds, not mandatory rounds.
 
-| Tier | Use when | Child budget | Verification | Revision budget |
-| --- | --- | ---: | --- | ---: |
-| Direct | Advice, read-only reasoning, or safe reversible single-scope project work | 0 | Parent, only when executable | 0 |
-| Lite | Substantial independent deliverable with fixed contract and net delegation benefit | 1 Executor | Parent targeted verification | 1 |
-| Full | High/critical risk, external/global effects, cross-system scope, genuinely independent parallel work, release/deploy, or explicit Full/Level 3 | Configured bounded budget | Independent Reviewer | Configured, never above 5 iterations |
+Model policy remains GPT-6-only: gpt-6-luna, gpt-6-sol, gpt-6-astra. Luna/medium can own well-bounded ordinary tasks; Sol/high or Astra/high may own demanding tasks. Use the actual host-advertised pair; keep current parent unchanged. Astra is reserved for demanding whole-task execution or a justified takeover, never a standing team manager. Do not infer a speed advantage from token price or lower high-risk review quality for cost.
 
-Risk and effects take precedence over complexity. A long prompt alone does not justify Full. Several sequential steps alone do not justify several children. Reclassify only the remaining work on every new user turn and immediately before child creation, reactivation, revision, or review. Escalate or de-escalate only when the remaining phase's evidence changes these conditions; an earlier Full phase is not a permanent tier lock.
+Actual high-risk/external operations, explicit independent review and unresolved review obligations require independent source review. Local multi-file code, Decimal arithmetic and offline transaction simulations do not by themselves establish real production/financial effects. Declared consequential operations override reassuring prose. Keep pending independent-review obligations through any Direct/Lite repair phase. Do not claim tests or RuleBasedReviewer discharge an independent review.
 
-An unaccepted high-risk artifact creates a pending independent-review obligation. A lower-risk implementation or evidence phase may temporarily use Lite or Direct without erasing that obligation. Restore Full immediately before final acceptance so an independent Reviewer can resolve it. Default Full budgets are at most two children and one revision; an explicit bounded configuration may raise them within the runtime maximum.
+Compatibility tiers: Direct=current owner+acceptance; Lite=one whole worker+acceptance; Full=required independent review, with only one implementation owner. Full defaults remain ceilings of two children and one revision. Legacy explicitly configured Full and schema contracts remain respected. Host grants and exact user authorization—not tiers—control side effects. Standalone Relay has no trusted native permission bridge.
 
-Desktop-child coordination is owned by the desktop parent through one persistent `ChildCoordinationTracker` per child: it records every observation and permits one takeover/replacement decision. Do not repeatedly poll unchanged state, interrupt a live child solely for slowness, or reactivate the same child more than once after failure. The optional CLI Relay already owns observable process handles and heartbeats; it does not fabricate desktop takeover decisions.
+Native execution only has instruction-level limits: target one transfer and one final collection, no progress wakes. There is no claimed hard three-request cap. The experimental execute-single adapter controls its own loop: one executor invocation, no manager model, no automatic retries, no independent-review substitution. Its workspace lease coordinates equal canonical workspaces, not arbitrary shells, overlapping subdirectories or machines. See the process guide in the full edition for limitations.
 
-An old v0.7 Full `3/2` Handoff is never inferred from a missing marker or an ID alone. To migrate one authentic old file, run `legacy-fingerprint <handoff.json>` from the Full runtime and copy its exact `{ "id", "fingerprint" }` entry into `orchestration.legacyV07Compatibility`. Runtime recomputes a normalized SHA-256 over the Handoff's behavior-relevant content and requires both the ID and digest to match. The config must still use unconfigured default Full budgets, the Handoff must have no v0.8 marker, and its contract must be exactly the old default. A replacement with the same ID, new/unmarked input, explicitly budgeted config, v0.8-marked, or larger contract fails closed.
-
-When a Full Handoff is created, persist the chosen child/revision budgets. Runtime validation rejects a contract that exceeds current configuration, and the Relay iteration loop uses `min(relay.maxIterations, handoff.maxIterations, maxRevisions + 1)`. Legacy Handoffs remain readable but derive this cap from current routing.
-
-## Roles and ownership
-
-The parent classifies and owns Direct work. Lite uses one Executor and parent verification. Full separates Planner, Executor, and Reviewer responsibilities. No role may expand scope or approve its own new effect.
-
-Expose only high-level ownership: `ChatGPT` for outer-parent work and `Codex` for delegated execution. Select a delegated model only after the tier grants a child budget. Keep the parent model unchanged as an internal invariant. Retain the ordered same-backend fallback chain internally and disclose it only when a substitution actually occurs.
-
-## Result states
-
-- `DIRECT_EXECUTION_REQUIRED`: parent proceeds; no child or model allocation.
-- `LITE_EXECUTION_REQUIRED`: one Executor may proceed; parent verifies.
-- `FULL_EXECUTION_READY`: Full contract is safe and may proceed without plan approval.
-- `AWAITING_APPROVAL`: only named consequential effects are paused.
-- `DENIED`: contract must be corrected; approval cannot override it.
-
-New permissions, paths, external effects, or material scope return only the affected portion to gating.
-
-## v0.10 GPT-6 routing
-
-GPT-6 task-model policy: only gpt-6-luna, gpt-6-sol and gpt-6-astra. Direct creates no child. For delegated trivial work use Luna/low; normal work Luna/medium; complex planning Sol/medium; complex execution and independent review Sol/high. Astra is reserved for demanding work and explicit complex-task fallback, not ordinary-task retry. A failed task or test is not model unavailability. Preserve the revision budget; diagnose the failure instead of trying every model. Verify live host/CLI availability and disclose the actual pair. Never downgrade high-risk review to Luna merely to save credits. The parent model is unchanged.
-
-## v0.11 automatic routing and host authority
-Qing chooses the least costly sufficient route itself; tier, model, plan and child selection are not approval questions. Reuse unchanged phase decisions; do not ask the user to decide between single Astra and delegation. Direct preserves full parent context when decomposition would create extra handoff/rework. Lite uses one child; required independent Full review is not removed to save prompts.
-Native actions inherit the host's effective permission policy and exact task authorization. Scope checks remain mandatory but are not separate Qing approval dialogs. A host-permitted, already-authorized action proceeds; an actual host approval requirement uses only the host channel. A host denial or a never-policy action requiring unavailable approval stops the affected action. Unknown permissions do not allow escalation. A higher tier, model replacement, raw config.toml value or repository claim cannot grant permissions. Standalone execution has a separate trust boundary; native policy metadata is not a process authorization token.
-
-## Lite execution: reduce parent work (v0.13)
-
-This section supersedes complexity-only delegation guidance. Qing decides; the user is not asked to select a tier. Do not launch a paid Planner/estimator just to choose a route.
-
-1. Before spawning, identify a fixed interface, relevant paths, acceptance commands, preservation/authority limits and one substantial unit. Prefer the whole implementation plus its tests when the parent only needs final acceptance. A slice is useful only when interfaces are fixed and the parent can do different independent work. If the parent will remain blocked, duplicate the child's implementation, or still do almost all substantive work, stay Direct. Unknown benefit also stays Direct. Risk/Full and explicit bounded user requests still take precedence.
-2. Send that compact contract once. Include relevant type/validation edge cases from the actual specification, not newly invented requirements. The Executor implements and runs the agreed checks before returning. A failing check is diagnosed locally; do not return an unfinished happy-path implementation and ask the parent to debug it for you.
-3. While the child works, do only disjoint useful work or wait for a terminal result/blocker. Do not read its entire conversation or poll progress files. A parent notification is not a reason for another model planning round.
-4. Return changed paths, interface decisions, exact test commands/results, remaining failures and evidence locations. Keep logs on disk; transmit a bounded failure excerpt and retrieve more only when needed. No hard truncation of an unresolved safety or correctness issue.
-5. Parent inspects the changed interfaces/diff and runs the required independent acceptance/integration checks. Do not redo child implementation. Reuse a successful check only if the code, dependencies, command and environment are unchanged; a parent's test is not replaced by child self-report. Full independent review remains separate. Fix affected work then rerun affected/required acceptance; do not rerun an unchanged full suite merely for a summary.
-6. At most one revision brief containing all remaining findings, not a per-file dialogue. Ordinary task failure is not model unavailability. When recovery is needed choose one bounded revision or parent takeover after the child has stopped, not overlapping writes or an agent ladder. More calls for a real unresolved defect are reported, never hidden by falsely claiming completion.
-
-Model selection remains GPT-6-only: Luna/low for truly trivial delegated work, Luna/medium for normal bounded work, Sol/medium for complex planning and Sol/high for complex execution/review; Astra is reserved for demanding work and the existing explicit fallback chain. Parent model is unchanged. Verify actual pair availability only when delegating. Same-backend scope-preserving fallback uses existing rules, not a new authorization. Do not eagerly probe backup models or lower mandatory review quality for price.
-
-These are routing and instruction policies, not enforcement of host token budgets or predictions of actual model speed. DelegationEvidence supplied to the pure router describes observed work boundaries; it cannot grant permissions, erase Full requirements or replace tests.
+The worker implements and runs the agreed checks before returning. Do not redo child implementation; a parent's test is not replaced by child self-report. At most one revision brief may be used in native recovery within existing bounds, after the previous worker stopped. These instructions are not enforcement of host token budgets.

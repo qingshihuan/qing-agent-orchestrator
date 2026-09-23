@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { executionPlan } from "./execution-plan.js";
 import type { DelegationEvidence } from "./delegation-benefit.js";
 import { detectCliReasonCodes, routeExecutionMode } from "./execution-mode-router.js";
 import { decideOrchestration } from "./orchestration-policy.js";
@@ -16,6 +17,7 @@ export interface TaskRouteDecision {
   execution: ExecutionModeDecision;
   complexity: TaskComplexityAnalysis;
   orchestration: OrchestrationDecision;
+  executionPlan: ReturnType<typeof executionPlan>;
 }
 
 export interface TaskRouteOptions {
@@ -133,7 +135,7 @@ export function routeTask(text: string, options: TaskRouteOptions = {}): TaskRou
     ? [route === "chat" ? "目标可由外层主会话直接回答。" : "由父任务保留上下文直接完成并验证；步骤或复杂度本身不证明委派收益。"]
     : orchestration.tier === "lite"
       ? ["目标需要一次有界委派；最多创建一个 Executor，由父任务验证。"]
-      : ["目标含高风险、跨系统、真正并行或显式完整编排信号，使用独立 Reviewer 的完整流程。"];
+      : ["真实风险或明确审查要求需要独立验证；执行仍保持单一负责人，不因可并行而增加团队。"];
   const execution = routeExecutionMode(task, options.edition ?? "full", route, orchestration.tier);
   return {
     executionOwner: execution.executionOwner,
@@ -145,6 +147,7 @@ export function routeTask(text: string, options: TaskRouteOptions = {}): TaskRou
     execution,
     complexity,
     orchestration,
+    executionPlan: executionPlan(task, orchestration, signals, options.delegationEvidence),
   };
 }
 

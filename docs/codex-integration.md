@@ -1,3 +1,9 @@
+# Current experimental architecture
+
+The single-owner rules in [single-owner.md](single-owner.md) supersede the historical topology/review coupling below. Parallel capability, cross-module scope and transport alone no longer mandate an independent Reviewer. Native instructions and execute-single have different enforcement boundaries; the latter is optional and requires existing authority. Stable Release remains v0.13.0 until connected verification.
+
+## Historical design below (superseded where noted)
+
 # 可选 Codex CLI 接入
 
 CLI 是完整版的条件能力，不是完整版的启动依赖。标准版没有启动器或 runtime。

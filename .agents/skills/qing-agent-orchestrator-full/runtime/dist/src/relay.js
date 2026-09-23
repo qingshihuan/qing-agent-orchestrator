@@ -1,3 +1,4 @@
+import { independentReviewReasons } from "./single-owner-policy.js";
 import { NodeProcessRunner } from "./process-runner.js";
 import { evaluateSafetyGate } from "./safety-gate.js";
 import { collectRelayCriterionEvidence } from "./relay-criterion-collector.js";
@@ -45,12 +46,16 @@ export class Relay {
     }
     async run(handoff, options) {
         const runHandle = options.runHandle;
-        const phaseEnforcementEnabled = handoff.metadata?.orchestrationPolicyVersion === "0.8";
+        const singleOwner = options.controllerMode === "single-owner";
+        if (singleOwner && (!runHandle || independentReviewReasons(handoff, options.orchestrationConfig).length > 0)) {
+            throw new Error("Single-owner deterministic acceptance cannot discharge independent review or run without durable evidence.");
+        }
+        const phaseEnforcementEnabled = !singleOwner && handoff.metadata?.orchestrationPolicyVersion === "0.8";
         const phaseDecisions = [];
         let phaseState = {
             previousTier: handoff.orchestration?.tier ?? "full",
-            pendingIndependentReview: handoff.orchestration?.independentReviewer ?? true,
-            unacceptedHighRiskArtifact: handoff.orchestration?.independentReviewer ?? true,
+            pendingIndependentReview: singleOwner ? false : handoff.orchestration?.independentReviewer ?? true,
+            unacceptedHighRiskArtifact: singleOwner ? false : handoff.orchestration?.independentReviewer ?? true,
         };
         const classifyRemainingPhase = async (iteration, milestone, text) => {
             const routed = routeTask(text, options.orchestrationConfig ? { orchestration: options.orchestrationConfig } : {});
@@ -89,7 +94,7 @@ export class Relay {
             };
         }
         const attempts = [];
-        const maxIterations = Math.max(1, Math.min(5, handoff.maxIterations, options.maxIterations));
+        const maxIterations = singleOwner ? 1 : Math.max(1, Math.min(5, handoff.maxIterations, options.maxIterations));
         let revisionInstructions = [];
         const persistentCriterionEvidenceErrors = [];
         if (runHandle) {
@@ -99,6 +104,8 @@ export class Relay {
             persistentCriterionEvidenceErrors.push("Relay-owned criteria require a current durable RunHandle.");
         }
         for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+            if (runHandle && await runHandle.isCancelled())
+                return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Cancelled before implementation; no owner started." };
             const executionPhase = await classifyRemainingPhase(iteration, iteration === 1 ? "before-child-creation" : "before-revision", iteration === 1 ? handoff.objective : revisionInstructions.join("\n") || handoff.objective);
             if (phaseEnforcementEnabled && executionPhase.decision.tier === "direct") {
                 if (runHandle) {
@@ -251,8 +258,40 @@ export class Relay {
                 detachObserver?.();
             }
             await Promise.all(observabilityWrites);
+            if (runHandle && await runHandle.isCancelled()) {
+                return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Cancelled; no acceptance or further execution was started." };
+            }
+            if (singleOwner && execution.status !== "succeeded") {
+                if (runHandle) {
+                    await runHandle.writeExecutorResult(execution, iteration);
+                    await runHandle.finalize("blocked", "blocked", iteration, "failed", "Single owner failed; no retry or manager model was invoked.");
+                }
+                return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Single owner failed. Artifacts retained; no automatic retry, reviewer or model substitution." };
+            }
+            if (singleOwner && execution.proposedOperations.length > 0) {
+                const proposedGate = evaluateSafetyGate({ ...handoff, id: `${handoff.id}-iteration-${iteration}`, requestedOperations: execution.proposedOperations }, options.approvedGateIds);
+                if (proposedGate.outcome !== "ALLOW") {
+                    if (runHandle) {
+                        await runHandle.writeExecutorResult(execution, iteration);
+                        await runHandle.finalize("blocked", "blocked", iteration, "failed", "New effect blocked before acceptance.");
+                    }
+                    return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "New effect requires scope/authority review; acceptance has not run." };
+                }
+            }
+            if (singleOwner && (await options.verifyImmutableInputs?.() ?? []).length) {
+                if (runHandle) {
+                    await runHandle.writeExecutorResult(execution, iteration);
+                    await runHandle.finalize("blocked", "blocked", iteration, "failed", "Protected inputs changed before acceptance execution.");
+                }
+                return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Protected inputs changed; acceptance commands were not executed." };
+            }
             if (this.executor.name === "codex-exec" && handoff.testPlan.length > 0 && runHandle) {
                 for (const command of handoff.testPlan) {
+                    if (singleOwner && (await options.verifyImmutableInputs?.() ?? []).length) {
+                        if (runHandle)
+                            await runHandle.finalize("blocked", "blocked", iteration, "failed", "Acceptance input changed between commands.");
+                        return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Protected input changed between acceptance commands; stopped." };
+                    }
                     if (await runHandle.isCancelled()) {
                         return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Run was cancelled; Relay stopped before further tests or review." };
                     }
@@ -340,6 +379,11 @@ export class Relay {
             }
             await classifyRemainingPhase(iteration, "before-review", "final acceptance of the current artifact and evidence");
             let review = await this.reviewer.review(handoff, execution, iteration, persistedEvidence, this.executor.name === "codex-exec" ? trustedCommands : undefined);
+            const immutableErrors = await options.verifyImmutableInputs?.() ?? [];
+            if (immutableErrors.length) {
+                review = { ...review, verdict: "HUMAN_REVIEW", summary: "Protected inputs changed or became unreadable.",
+                    findings: [...review.findings, ...immutableErrors.map(message => ({ severity: "blocker", message }))] };
+            }
             if (gitAudit?.requiresHumanReview) {
                 review = {
                     ...review,
@@ -367,10 +411,11 @@ export class Relay {
             }
             if (runHandle) {
                 await runHandle.writeReview(review, iteration);
-                await runHandle.appendEvent("review.completed", "reviewing", iteration, "Reviewer completed the iteration.", { verdict: review.verdict });
+                await runHandle.appendEvent(singleOwner ? "acceptance.completed" : "review.completed", "reviewing", iteration, singleOwner ? "Deterministic acceptance completed; not an independent review." : "Reviewer completed the iteration.", { verdict: review.verdict });
             }
-            phaseState = recordIndependentReviewOutcome(phaseState, review.verdict);
-            if (runHandle)
+            if (!singleOwner)
+                phaseState = recordIndependentReviewOutcome(phaseState, review.verdict);
+            if (runHandle && !singleOwner)
                 await runHandle.appendEvent("orchestration.review.outcome", "reviewing", iteration, "Independent review outcome committed.", { verdict: review.verdict, pendingIndependentReview: phaseState.pendingIndependentReview });
             const attempt = { iteration, execution, review };
             if (postExecutionGate)

@@ -55,9 +55,9 @@ test("the routing benchmark restores the intended Direct Lite Full budget", () =
     ["分析生产环境部署方案，不实际部署", "direct"],
     ["删除 docs/legacy.md", "full"],
     ["实现修复并部署到生产环境", "full"],
-    ["把项目接入 GitHub Actions CI", "full"],
-    ["同时修改前后端和数据库服务", "full"],
-    ["并行处理多个独立工作流", "full"],
+    ["把项目接入 GitHub Actions CI", "lite"],
+    ["同时修改前后端和数据库服务", "direct"],
+    ["并行处理多个独立工作流", "direct"],
   ] as const;
 
   const counts = { direct: 0, lite: 0, full: 0 };
@@ -74,8 +74,8 @@ test("the routing benchmark restores the intended Direct Lite Full budget", () =
     modelSelectionCount += Number(decision.orchestration.modelSelectionRequired);
   }
 
-  assert.deepEqual(counts, { direct: 10, lite: 1, full: 5 });
-  assert.equal(childBudget, 11);
-  assert.equal(reviewerCount, 5);
-  assert.equal(modelSelectionCount, 6);
+  assert.deepEqual(counts, { direct: 12, lite: 2, full: 2 });
+  assert.equal(childBudget, 6);
+  assert.equal(reviewerCount, 2);
+  assert.equal(modelSelectionCount, 4);
 });

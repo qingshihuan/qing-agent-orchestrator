@@ -1,19 +1,20 @@
 ---
 name: qing-agent-orchestrator
-description: Qing chooses direct work or worthwhile delegation; minimize parent rounds and total cost while preserving host permissions and acceptance.
+description: Route to one complete task owner, not a management team; preserve acceptance and effective host authority.
 ---
 
-# Qing
+# Qing — single owner (experimental)
 
-Qing decides Direct/Lite/Full; no routine user choice or plan approval.
+Qing decides Direct/Lite/Full: compatibility labels, not team templates.
 
 ## Direct fast path
-Unless Full is required or delegation has a clear net benefit, do the task in this parent NOW. Multiple steps alone are not a benefit. For Direct, do not preload references or schemas, call dispatch/start/doctor/models, allocate a child, or emit a routing-only reply. Read relevant files, implement and verify. Batch independent reads/checks with separate failure evidence; do not reread unchanged text. Put the route in the final outcome, not a separate model round.
+Current capable parent does the whole task now. For Direct, do not preload references or schemas, call dispatch/start/doctor/models, or emit a routing-only reply. Read, implement and verify. Record the route in the result, not a separate model round. Unknown benefit defaults Direct without an estimator call. Multiple files, offline money/transaction logic, cross-module scope, transport and possible parallelism alone never require Full or a Reviewer.
 
-## Delegate only when useful
-Lite needs a substantial complete deliverable, fixed interfaces and ready acceptance tests, leaving the parent only integration or genuinely independent work. A small helper while the parent keeps most work is not enough. Unknown benefit defaults Direct without an estimator model call. Explicit delegation is honored within existing bounds.
-For Lite read only the Lite section of [orchestrator-spec.md](references/orchestrator-spec.md): one Executor plus parent acceptance, at most one revision. Do not duplicate child implementation or stream its trace into the parent. Use one final result/real blocker; test changed integration once per snapshot.
-Full remains required for high-risk/external effects, cross-system or genuinely parallel work, release/deploy or explicit Full. Load [Handoff](references/handoff-protocol.md), [Reviewer](references/reviewer-rules.md), [Handoff schema](schemas/handoff.schema.json) and [Review schema](schemas/review.schema.json). Retain pending independent-review obligations through de-escalation; defaults two children/one revision. Never skip required review or verification. Reuse evidence only for the same unchanged inputs, commands and environment.
+## Whole-task transfer only
+Transfer only a substantial complete deliverable with fixed scope and acceptance; one worker implements, debugs and tests it. Parent does not keep half the work, spawn a manager, read live transcripts or poll unchanged progress. Send the contract once; wait for terminal result or a real blocker, then independently verify. Read [Single-owner execution](references/orchestrator-spec.md) only for transfer. Native parent requests still cost tokens; no host request cap is enforced by this skill.
+
+## Verification is separate
+Actual consequential effects, explicit review and pending independent-review obligations still require an independent Reviewer. Parent may be the only implementer plus a read-only Reviewer. Only then load [Handoff](references/handoff-protocol.md), [Reviewer](references/reviewer-rules.md), [Handoff schema](schemas/handoff.schema.json) and [Review schema](schemas/review.schema.json). Never skip required review or verification. Tests are not source review. Reuse evidence only for the same unchanged inputs, commands and environment.
 
 ## Authority
-Use effective host permissions and exact task scope, not a second Qing approval system. on-request uses host approval; never means no new permission prompt, not unrestricted access. Unknown/denied access stops affected work; no settings edits, forged grants or backend bypass. For consequential/uncertain effects read [safety-gates.md](references/safety-gates.md). Preserve unrelated work. Report actual artifacts, verification, limits and executionOwner; a plan/mock/heartbeat is not completion.
+Use host permissions and exact scope, not a second Qing approval system. on-request uses the host; never means no new permission prompt, not unrestricted access. Unknown/denied access stops affected work; no forged grants, security changes or backend bypass. Read [safety-gates.md](references/safety-gates.md) for consequential effects. Preserve unrelated work. Report actual artifacts, tests, limits, executionOwner and model substitutions, never a plan/mock as completion.

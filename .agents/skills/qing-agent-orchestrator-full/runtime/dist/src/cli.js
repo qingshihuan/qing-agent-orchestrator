@@ -9,6 +9,9 @@ import { DryRunExecutor } from "./executors/dry-run-executor.js";
 import { CodexExecExecutor } from "./executors/codex-exec-executor.js";
 import { MockExecutor } from "./executors/mock-executor.js";
 import { CodexHandoffPlanner, planLocally, saveHandoff } from "./planner.js";
+import { protectedInputSnapshot } from "./protected-inputs.js";
+import { SingleOwnerController } from "./single-owner-controller.js";
+import { independentReviewReasons } from "./single-owner-policy.js";
 import { Relay } from "./relay.js";
 import { RuleBasedReviewer } from "./reviewer.js";
 import { RunStore, resolveStateDirectory } from "./run-store.js";
@@ -73,6 +76,7 @@ function compactControlPlane(value) {
     return {
         status: source.status,
         permissionHandling: source.permissionHandling ?? null,
+        executionPlan: source.executionPlan ?? null,
         executionMode: execution?.mode ?? null,
         cliRecommendation: execution?.recommendation ?? null,
         executionOwner: source.executionOwner ?? execution?.executionOwner ?? null,
@@ -164,6 +168,8 @@ async function configuredModel(config, role, backend, task, decision) {
         throw new Error("Chat routing cannot select a Codex model.");
     const analyzedComplexity = analyzeTaskComplexity({ text: task, category: decision.category, role, routeSignals: decision.signals });
     const complexityBand = decision.orchestration.tier === "lite" ? "normal" : analyzedComplexity.band;
+    if (backend === "desktop-child" && role === "executor" && decision.executionPlan.implementationMode === "current-parent")
+        return undefined;
     if (backend === "desktop-child") {
         return {
             selection: selectModelCandidate(config.modelRouting.candidates, new Map(), { backend, role, route: decision.route, category: decision.category, complexityBand }),
@@ -228,6 +234,8 @@ function usage() {
         "       creates and saves a read-only planned Handoff; it never executes the task",
         "  execute <handoff.json> --allow-real-execution [--approve-handoff <handoff-id>] [--approve <gate-id>]... [--config <file>]",
         "       safe declared work needs no plan approval; effect gates still require their exact IDs",
+        "  execute-single <handoff.json> --protect <spec-file> --protect <acceptance-file> --allow-real-execution [--config <file>]",
+        "       experimental: one complete worker, no manager model/retry ladder; deterministic acceptance is not independent review",
         "  validate <handoff.json>",
         "  legacy-fingerprint <handoff.json>",
         "       prints the deterministic ID + SHA-256 entry required to opt in one authentic v0.7 3/2 Handoff",
@@ -330,7 +338,7 @@ async function main() {
             const handoff = createPendingDispatchHandoff(task, workspace, decision);
             const gate = evaluateSafetyGate(handoff);
             const reviewerBundle = await configuredModel(config, "reviewer", "desktop-child", task, decision);
-            print({ ...decision, execution, ...nativeFullControl(gate.outcome), handoffId: handoff.id, handoffPath: null, handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, reviewerModelSelection: reviewerBundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), reviewerInvocation: desktopDelegationContract(reviewerBundle?.selection ?? null), modelProbe: "not-applicable" });
+            print({ ...decision, execution, ...nativeFullControl(gate.outcome), handoffId: handoff.id, handoffPath: null, handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, reviewerModelSelection: reviewerBundle?.selection ?? null, delegationInvocation: decision.executionPlan.implementationMode === "current-parent" ? null : desktopDelegationContract(bundle?.selection ?? null), reviewerInvocation: desktopDelegationContract(reviewerBundle?.selection ?? null), modelProbe: "not-applicable" });
             if (gate.outcome === "DENY")
                 process.exitCode = 2;
             return;
@@ -338,17 +346,12 @@ async function main() {
         const workspace = await resolveSafeWorkspace(runtimeRoot, requestedWorkspace);
         let planned;
         let bundle;
-        if (args.includes("--no-model-probe")) {
-            planned = { handoff: createPendingDispatchHandoff(task, workspace, decision), workspace };
-        }
-        else {
-            bundle = await configuredModel(config, "planner", "codex-cli", task, decision);
-            planned = await new CodexHandoffPlanner(plannerOptions(config, bundle)).plan(task, workspace);
-        }
+        planned = { handoff: createPendingDispatchHandoff(task, workspace, decision), workspace };
+        // This is a scaffold, not a runnable acceptance contract; no paid Planner.
         planned = { ...planned, handoff: bindHandoffOrchestration(planned.handoff, decision.orchestration) };
         const handoffPath = await saveHandoff(planned.handoff, runtimeRoot, config.runtime.stateDirectory, flagValue(args, "--out"));
         const gate = evaluateSafetyGate(planned.handoff);
-        print({ ...decision, execution, status: gate.outcome === "ALLOW" ? "FULL_EXECUTION_READY" : gate.outcome === "DENY" ? "DENIED" : "AWAITING_APPROVAL", handoffId: planned.handoff.id, handoffPath, handoff: planned.handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, modelHealth: bundle?.health ?? [], modelProbe: args.includes("--no-model-probe") ? "skipped-by-explicit-flag" : "completed", nextStep: gate.outcome === "ALLOW" ? "The safe Handoff is ready without plan approval. Dispatch still never executes it." : gate.outcome === "DENY" ? "Revise the Handoff; denial cannot be overridden." : "Approve only the displayed effect gate IDs. Dispatch never executes the task." });
+        print({ ...decision, execution, status: gate.outcome === "ALLOW" ? "FULL_EXECUTION_READY" : gate.outcome === "DENY" ? "DENIED" : "AWAITING_APPROVAL", handoffId: planned.handoff.id, handoffPath, handoff: planned.handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, modelHealth: bundle?.health ?? [], modelProbe: "not-started", contractStatus: "needs-concrete-acceptance", nextStep: gate.outcome === "ALLOW" ? "Refine exact paths and concrete testPlan; this local scaffold does not prove completion. Use execute-single with protected inputs only when independent review is not required. No model Planner was invoked." : gate.outcome === "DENY" ? "Revise the Handoff; denial cannot be overridden." : "Approve only the displayed effect gate IDs. Dispatch never executes the task." });
         if (gate.outcome === "DENY")
             process.exitCode = 2;
         return;
@@ -395,7 +398,7 @@ async function main() {
         if (!workspace)
             throw new Error("start requires --workspace <project-directory>");
         const config = await loadConfig(configPath(args));
-        const plannerMode = flagValue(args, "--planner") ?? "auto";
+        const plannerMode = flagValue(args, "--planner") ?? "local";
         if (!["auto", "codex", "local"].includes(plannerMode)) {
             throw new Error("--planner must be auto, codex, or local");
         }
@@ -404,7 +407,7 @@ async function main() {
             print({ ...decision, status: "DIRECT_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffPath: null, plannerSource: null, modelSelection: null, modelProbe: "not-applicable", nextStep: "Complete this task directly. Start did not create a Handoff, allocate a model, probe the CLI, or invoke any Planner." });
             return;
         }
-        if (decision.orchestration.tier === "lite") {
+        if (decision.orchestration.tier === "lite" && decision.execution.mode !== "cli-recommended") {
             const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
             print({ ...decision, status: "LITE_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffPath: null, plannerSource: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Use at most one desktop Executor child and parent verification. Start did not invoke the connected or local Handoff Planner." });
             return;
@@ -475,6 +478,45 @@ async function main() {
                 fingerprint: legacyV07HandoffFingerprint(handoff),
             },
         });
+        return;
+    }
+    if (command === "execute-single") {
+        const config = await loadConfig(configPath(args));
+        const protectedPaths = flagValues(args, "--protect");
+        if (!protectedPaths.length)
+            throw new Error("execute-single requires --protect for immutable specification/acceptance inputs.");
+        if (!config.executor.codexExec.enabled || !args.includes("--allow-real-execution"))
+            throw new Error("Real Codex execution requires enabled config and --allow-real-execution.");
+        const approvals = [...config.security.approvedGateIds, ...flagValues(args, "--approve")];
+        const gate = evaluateSafetyGate(handoff, approvals);
+        if (gate.outcome !== "ALLOW")
+            throw new Error("Single-owner execution is blocked by the existing effect gate: " + gate.outcome);
+        const reasons = independentReviewReasons(handoff, config.orchestration);
+        if (reasons.length) {
+            print({ status: "INDEPENDENT_REVIEW_REQUIRED", reasons, managerModelCalls: 0, executorInvocations: 0, grantsPermissions: false });
+            process.exitCode = 4;
+            return;
+        }
+        if (!handoff.testPlan.length || handoff.testPlan.some(c => /Discover and run/.test(c)))
+            throw new Error("Concrete acceptance commands are required; a local planning scaffold is not executable.");
+        const workspace = await resolveSafeWorkspace(runtimeRoot, handoff.workspace.root);
+        await protectedInputSnapshot(workspace, protectedPaths);
+        handoff.workspace.root = workspace;
+        const decision = routeTask(handoff.objective, { orchestration: config.orchestration });
+        const limits = resolveExecutableOrchestrationLimits(handoff, decision.orchestration, config.orchestration, config.relay.maxIterations);
+        // Selecting the explicitly requested standalone worker does not create a manager.
+        const selectionDecision = { ...decision, route: decision.route === "chat" ? "codex" : decision.route,
+            orchestration: { ...decision.orchestration, childAgentBudget: 1, modelSelectionRequired: true } };
+        const bundle = await configuredModel(config, "executor", "codex-cli", handoff.objective, selectionDecision);
+        const executor = createExecutor("codex-exec", config, args, bundle);
+        const runHandle = await new RunStore(resolveStateDirectory(runtimeRoot, config.runtime.stateDirectory)).createRun(handoff);
+        const result = await new SingleOwnerController(executor).run(handoff, {
+            maxIterations: limits.maxIterations, approvedGateIds: approvals, runHandle,
+            orchestrationConfig: config.orchestration, protectedPaths,
+        });
+        print({ ...result, executionOwner: "Codex", modelSelection: bundle?.selection ?? null });
+        if (result.status !== "COMPLETED")
+            process.exitCode = 4;
         return;
     }
     if (command === "execute") {

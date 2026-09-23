@@ -226,3 +226,7 @@
 
 - 源码测试、Skill 校验、打包验证、安装验证、connected E2E、Git提交和远端发布分别报告。
 - OpenAI API / Codex SDK适配器、原生审批 UI、常驻服务队列和真实 CLI写入 E2E不属于本版本已完成能力。
+
+## 0.14.0-dev.1 - 2026-09-23
+
+Unreleased experimental architecture: separate execution topology, verification and authority; one complete task owner; code-controlled single worker and immutable acceptance, cooperative workspace leases and coverage-qualified usage. No new stable Release or measured speed/cost claim. See docs/single-owner.md.

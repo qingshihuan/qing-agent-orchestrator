@@ -37,11 +37,11 @@ test("one-sentence router covers chat, codex, hybrid, and negated risk terms", (
   assert.equal(routeTask("实现修复并部署到生产环境").route, "hybrid");
 });
 
-test("adaptive orchestration reserves Full for high-risk, cross-system, parallel, or explicit full work", () => {
+test("adaptive orchestration reserves Full for real high-risk effects and explicit review", () => {
   for (const goal of [
     "实现修复并部署到生产环境",
-    "同时修改前后端和数据库服务",
-    "并行处理多个独立工作流",
+    "同时修改前后端并部署到生产环境",
+    "并行执行破坏性数据库迁移",
     "使用完整 Qing 并安排独立 Reviewer 实现功能",
   ]) {
     const decision = routeTask(goal);
@@ -246,9 +246,10 @@ test("dispatch exposes Direct, Lite, Full-ready, and gated Full without silent e
     const declined = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "把它接入 GitHub Actions CI", "--workspace", workspace, "--config", "config/relay.example.json", "--cli-response", "decline"] });
     assert.equal(declined.exitCode, 0, declined.stderr);
     const fallback = JSON.parse(declined.stdout) as Record<string, unknown>;
-    assert.equal(fallback.status, "FULL_EXECUTION_READY");
+    assert.equal(fallback.status, "LITE_EXECUTION_REQUIRED");
     assert.match(JSON.stringify(fallback), /desktop-fallback/);
-    assert.match(String(fallback.handoffId), /^qing-dispatch-/);
+    assert.equal(fallback.handoffId, null);
+    assert.equal((fallback.orchestration as { independentReviewer: boolean }).independentReviewer, false);
     assert.match(JSON.stringify(fallback), /internal-child/);
 
     const gated = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "实现修复并部署到生产环境", "--workspace", workspace, "--config", "config/relay.example.json", "--no-model-probe"] });
