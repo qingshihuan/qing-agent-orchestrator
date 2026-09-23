@@ -16,7 +16,7 @@
 
 ## 可选 CLI 路由
 
-选择进程后端不再固定询问接受/拒绝。正常 dispatch 可自动进行只读 doctor 检查；自动决策标为 auto-selected，不伪装为用户接受。`--no-model-probe` 同时阻止依赖/模型检查，返回 `CLI_DEPENDENCY_CHECK_REQUIRED`；宿主驱动可直接用 `--cli-response auto` 继续。accept/decline 兼容保留，明确拒绝仍被尊重。路由函数本身无 I/O。
+选择进程后端不再固定询问接受/拒绝。正常 dispatch 可自动进行只读 doctor 检查；自动决策标为 auto-selected，不伪装为用户接受。`--no-model-probe` 同时阻止依赖/模型检查，返回 `CLI_DEPENDENCY_CHECK_REQUIRED`；宿主驱动可移除 `--no-model-probe` 后用 `--cli-response auto` 继续；保留 no-probe 时 auto/accept 都不能触发检查。accept/decline 兼容保留，明确拒绝仍被尊重。路由函数本身无 I/O。
 
 缺失依赖或未登录只返回 setup 状态；不会自动安装、登录或修改配置。独立 Relay 不等于原生子智能体：当前没有可信的跨进程宿主权限传递接口。其默认禁用真实执行、--allow-real-execution、sandbox、精确效果 gate 均不变。宿主可传递已经明确授权的机器参数，但生成的 Handoff 或仓库文件不能自己给自己批准。普通工作优先原生后端，真正继承当前宿主权限，而非另外启动忽略配置的进程冒充继承。
 

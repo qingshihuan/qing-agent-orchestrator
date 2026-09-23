@@ -6,7 +6,7 @@ CLI 是完整版的条件能力，不是完整版的启动依赖。标准版没�
 
 ## 自动选择和只读检查
 
-Qing 仅在明确 CLI/CI、持久运行、机器控制或隔离等需求下选择进程方式。普通复杂工程保持原生子智能体。选择方式不再额外询问接受/拒绝；dispatch 自动只读检查，审计为 auto-selected。--no-model-probe 阻止发现和模型调用并返回 CLI_DEPENDENCY_CHECK_REQUIRED，--cli-response auto 可由宿主驱动继续；accept/decline 仍兼容，拒绝不再提示。
+Qing 仅在明确 CLI/CI、持久运行、机器控制或隔离等需求下选择进程方式。普通复杂工程保持原生子智能体。选择方式不再额外询问接受/拒绝；dispatch 自动只读检查，审计为 auto-selected。--no-model-probe 阻止发现和模型调用并返回 CLI_DEPENDENCY_CHECK_REQUIRED，移除该标志后 --cli-response auto 可由宿主驱动继续；保留 no-probe 时 auto/accept 都不触发检查；accept/decline 仍兼容，拒绝不再提示。
 
 检查不会安装、登录、变更配置或执行任务。缺少能力只要求处理真正的缺口。安装、账户访问或新外部效果需要实际任务/宿主授权；同一授权不重复询问。
 

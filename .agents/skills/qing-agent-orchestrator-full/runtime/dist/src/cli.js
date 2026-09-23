@@ -297,8 +297,8 @@ async function main() {
             return;
         }
         if (execution.mode === "cli-recommended") {
-            if (!cliResponse && args.includes("--no-model-probe")) {
-                print({ ...decision, execution, permissionHandling: nativePermissionHandling, status: "CLI_DEPENDENCY_CHECK_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "not-started", nextStep: "Qing selected the process route, not a user-choice prompt. The explicit no-model-probe flag prevents discovery and planning calls. Continue with host-permitted read-only checks using --cli-response auto when appropriate; do not ask the user to choose a routing tier or approve this plan. This is not authorization for installation or task execution." });
+            if (cliResponse !== "decline" && args.includes("--no-model-probe")) {
+                print({ ...decision, execution, permissionHandling: nativePermissionHandling, status: "CLI_DEPENDENCY_CHECK_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "not-started", nextStep: "Qing selected the process route, not a user-choice prompt. The explicit no-model-probe flag prevents discovery and planning calls. Remove --no-model-probe to continue with host-permitted read-only checks using --cli-response auto when appropriate; do not ask the user to choose a routing tier or approve this plan. This is not authorization for installation or task execution." });
                 return;
             }
             if (cliResponse === "decline") {

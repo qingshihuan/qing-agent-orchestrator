@@ -158,3 +158,29 @@ test("Handoff references distinguish native host assessment from standalone gran
   assert.match(full,/## Standalone Relay/);
   assert.match(full,/must not manufacture/);
 });
+
+
+test("no-probe dominates auto/accept overrides without manufacturing an accepted action",async()=>{
+  await inFixture(async(directory,config)=>{
+    for(const override of ["auto","accept"]){
+      const result=await cli(directory,config,["dispatch","--task","使用 CLI 完成工程任务","--workspace",directory,"--no-model-probe","--cli-response",override,"--compact"]);
+      assert.equal(result.exitCode,0,result.stderr);
+      const response=JSON.parse(result.stdout);
+      assert.equal(response.status,"CLI_DEPENDENCY_CHECK_REQUIRED");
+      assert.equal(response.modelProbe,"not-started");
+      assert.equal(response.cliRecommendation.dependencyStatus,"not-checked");
+      assert.equal(response.handoffId,null);
+    }
+  });
+});
+test("explicit decline with no-probe continues native work rather than asking a routing question",async()=>{
+  await inFixture(async(directory,config)=>{
+    const result=await cli(directory,config,["dispatch","--task","把它接入 GitHub Actions CI","--workspace",directory,"--no-model-probe","--cli-response","decline","--compact"]);
+    assert.equal(result.exitCode,0,result.stderr);
+    const response=JSON.parse(result.stdout);
+    assert.equal(response.executionMode,"desktop-fallback");
+    assert.equal(response.cliRecommendation.response,"declined");
+    assert.equal(response.modelProbe,"not-applicable");
+    assert.equal(response.permissionHandling.grantsPermissions,false);
+  });
+});
