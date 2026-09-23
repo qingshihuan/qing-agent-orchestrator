@@ -72,7 +72,7 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             $release = $json | ConvertFrom-Json
             "exists=true" >> $env:GITHUB_OUTPUT
-            "draft=$([string]$release.isDraft).ToLowerInvariant()" >> $env:GITHUB_OUTPUT
+            "draft=$(([string]$release.isDraft).ToLowerInvariant())" >> $env:GITHUB_OUTPUT
             "url=$($release.url)" >> $env:GITHUB_OUTPUT
           } else {
             "exists=false" >> $env:GITHUB_OUTPUT
