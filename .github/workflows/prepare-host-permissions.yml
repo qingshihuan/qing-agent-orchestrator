@@ -1,0 +1,98 @@
+name: Prepare host-native permissions
+on:
+  push:
+    branches: [codex/host-permissions-v0.11.0]
+    paths:
+      - .github/maintenance/host-permissions.py
+      - .github/workflows/prepare-host-permissions.yml
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.repository == 'qingshihuan/qing-agent-orchestrator' && github.actor == 'qingshihuan'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply scoped source and instruction changes
+        run: python .github/maintenance/host-permissions.py
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Run every regression test
+        shell: pwsh
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          npm test *> "$env:RUNNER_TEMP/host-permissions-tests.log"
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Select-String -Path "$env:RUNNER_TEMP/host-permissions-tests.log" -Pattern '^not ok' -Context 1,45
+            Get-Content "$env:RUNNER_TEMP/host-permissions-tests.log" -Tail 15
+            throw 'Full regression suite failed; no source or archive is published.'
+          }
+          Get-Content "$env:RUNNER_TEMP/host-permissions-tests.log" -Tail 12
+      - name: Validate skill metadata and record permission boundaries
+        shell: python
+        run: |
+          from pathlib import Path
+          import re,json,subprocess,hashlib
+          base='5abbe6f026b7adeb6419ad0253b72e036d24eafd'
+          for name in ['qing-agent-orchestrator','qing-agent-orchestrator-full']:
+              root=Path('.agents/skills')/name
+              text=(root/'SKILL.md').read_text(encoding='utf-8')
+              assert text.startswith('---\nname: '+name+'\n')
+              assert '\ndescription: ' in text.split('---',2)[1]
+              for path in re.findall(r'\]\(([^)]+)\)',text):
+                  if not path.startswith(('https:','http:')): assert (root/path).is_file(),(name,path)
+          protected=['src/safety-gate.ts','src/config.ts','src/executors/codex-exec-executor.ts','src/model-router.ts','src/model-health.ts','src/model-scheduler.ts','src/relay.ts','src/reviewer.ts']
+          hashes={}
+          for path in protected:
+              current=Path(path).read_bytes().replace(b'\r\n',b'\n')
+              old=subprocess.check_output(['git','show',base+':'+path]).replace(b'\r\n',b'\n')
+              assert current==old,path
+              hashes[path]=hashlib.sha256(current).hexdigest()
+          original_paths=subprocess.check_output(['git','ls-tree','-r','--name-only',base],text=True).splitlines()
+          matches=[]
+          for path in original_paths:
+              if path.endswith(('.ts','.js','.json','.toml','.yaml','.yml','.md')):
+                  original=subprocess.check_output(['git','show',base+':'+path])
+                  if b'features.thread_tools' in original: matches.append(path)
+          report={'baseline':base,'validation':'unit/CLI contract and archive checks; not live desktop approval UI','nativeAuthority':'host-effective-session','nativeMetadataGrantsPermissions':False,'standaloneEnforcementUnchanged':hashes,'baselineThreadToolsOccurrences':matches,'limits':['No config.toml edited or live desktop permission state accessed','No connected model/account calls or real approval-dialog count','No trusted standalone cross-process host permission bridge']}
+          Path('docs/host-permissions-validation.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(report,indent=2))
+      - name: Rebuild and validate both installable archives
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/host-permissions-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Commit verified changes to this branch only and remove helpers
+        shell: pwsh
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+          EXPECTED_HEAD: ${{ github.sha }}
+        run: |
+          if ($env:TARGET_BRANCH -ne 'codex/host-permissions-v0.11.0') { throw 'Unexpected target branch' }
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD) { throw 'Unexpected checkout' }
+          git add -- src tests .agents/skills artifacts docs package.json package-lock.json CHANGELOG.md CONTRIBUTING.md README.md README.en.md
+          if ($LASTEXITCODE -ne 0) { throw 'Staging failed' }
+          git rm -- .github/maintenance/host-permissions.py .github/workflows/prepare-host-permissions.yml
+          if ($LASTEXITCODE -ne 0) { throw 'Helper removal failed' }
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Delegate native approvals to the host and make Qing routing automatic for v0.11.0'
+          if ($LASTEXITCODE -ne 0) { throw 'Commit failed' }
+          git push origin "HEAD:refs/heads/$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Branch moved; no force push permitted' }
