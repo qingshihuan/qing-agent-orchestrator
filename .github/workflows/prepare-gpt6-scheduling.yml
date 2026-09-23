@@ -1,0 +1,77 @@
+name: Prepare GPT-6-only scheduling
+on:
+  push:
+    branches: [codex/gpt6-only-scheduler-20260923]
+    paths:
+      - .github/maintenance/migrate-gpt6.py
+      - .github/workflows/prepare-gpt6-scheduling.yml
+permissions:
+  contents: read
+concurrency:
+  group: prepare-gpt6-scheduling
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.repository == 'qingshihuan/qing-agent-orchestrator' && github.actor == 'qingshihuan'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply bounded migration
+        run: python .github/maintenance/migrate-gpt6.py
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Run complete regression suite
+        shell: pwsh
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          npm test *> "$env:RUNNER_TEMP/gpt6-tests.log"
+          $result = $LASTEXITCODE
+          if ($result -ne 0) {
+            Select-String -Path "$env:RUNNER_TEMP/gpt6-tests.log" -Pattern '^not ok' -Context 1,45
+            Get-Content "$env:RUNNER_TEMP/gpt6-tests.log" -Tail 15
+            throw 'Complete regression suite failed; changes are not published.'
+          }
+          Get-Content "$env:RUNNER_TEMP/gpt6-tests.log" -Tail 12
+      - name: Measure deterministic scheduling requests
+        run: node scripts/measure-gpt6-scheduling.mjs
+      - name: Rebuild and validate both skill archives
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/gpt6-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Verify three-model policy inside generated runtime
+        shell: pwsh
+        run: |
+          node --input-type=module -e "import { supportedTaskModels, supportedReasoningEfforts } from './.agents/skills/qing-agent-orchestrator-full/runtime/dist/src/model-router.js'; import assert from 'node:assert/strict'; assert.deepEqual([...supportedTaskModels].sort(), ['gpt-6-astra','gpt-6-luna','gpt-6-sol']); for (const backend of ['codex-cli','desktop-child']) assert.deepEqual(supportedReasoningEfforts(backend,'gpt-5.6-sol'),[]); console.log('Generated runtime has exactly the three GPT-6 task models.');"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged model policy check failed' }
+      - name: Commit validated source and bundles to the preparation branch only
+        shell: pwsh
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          if ($env:TARGET_BRANCH -ne 'codex/gpt6-only-scheduler-20260923') { throw 'Unexpected branch' }
+          git add -- src tests examples schemas config/relay.example.json .agents/skills artifacts package.json package-lock.json docs README.md README.en.md CHANGELOG.md scripts/measure-gpt6-scheduling.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Staging failed' }
+          git rm -- .github/maintenance/migrate-gpt6.py .github/workflows/prepare-gpt6-scheduling.yml
+          if ($LASTEXITCODE -ne 0) { throw 'Maintenance helper removal failed' }
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Use only GPT-6 models and share lazy task scheduling; prepare v0.10.0'
+          if ($LASTEXITCODE -ne 0) { throw 'Commit failed' }
+          git push origin "HEAD:refs/heads/$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Branch moved or push failed; no force push permitted' }
