@@ -22,8 +22,34 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Apply scoped compatibility changes
-        run: python .github/maintenance/node-compat.py
+      - name: Validate authorized workflow edits and apply non-workflow compatibility changes
+        shell: python
+        run: |
+          import ast, subprocess
+          from pathlib import Path
+          workflows = {
+              '.github/workflows/ci.yml': '3c39f3c77a12c1aef72db8408021801a5673496c',
+              '.github/workflows/release.yml': 'b5aa806d75de39b90527022c5dc2cb940981406a',
+          }
+          # The build token has no workflow-edit permission. Those exact changes
+          # have already been made via the authorized GitHub connector.
+          for path, expected in workflows.items():
+              actual = subprocess.check_output(['git','hash-object','--',path],text=True).strip()
+              assert actual == expected, 'Unexpected workflow content: ' + path
+          code = Path('.github/maintenance/node-compat.py').read_text(encoding='utf-8')
+          old = 'assert changed <= HELPERS,'
+          assert code.count(old) == 1
+          code = code.replace(old, 'assert changed <= HELPERS | set(workflows),', 1)
+          tree = ast.parse(code)
+          def workflow_edit(statement):
+              return (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call)
+                  and isinstance(statement.value.func, ast.Name) and statement.value.func.id == 'replace'
+                  and statement.value.args and isinstance(statement.value.args[0], ast.Constant)
+                  and statement.value.args[0].value in workflows)
+          assert sum(bool(workflow_edit(statement)) for statement in tree.body) == 7
+          tree.body = [statement for statement in tree.body if not workflow_edit(statement)]
+          exec(compile(tree, 'non-workflow-node-compat', 'exec'), {'workflows': workflows})
+          subprocess.run(['git','diff','--exit-code','--',*workflows],check=True)
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
@@ -46,8 +72,7 @@ jobs:
           npm test *> "$env:RUNNER_TEMP/node-compat-tests.log"
           $code = $LASTEXITCODE
           if ($code -ne 0) {
-            Select-String -Path "$env:RUNNER_TEMP/node-compat-tests.log" -Pattern '^not ok' -Context 1,40
-            Get-Content "$env:RUNNER_TEMP/node-compat-tests.log" -Tail 20
+            Get-Content "$env:RUNNER_TEMP/node-compat-tests.log" -Tail 150
             throw 'Full regression suite failed; no source or package is committed.'
           }
           Get-Content "$env:RUNNER_TEMP/node-compat-tests.log" -Tail 12
@@ -67,11 +92,12 @@ jobs:
           baseline = 'a324937e47a9f54bf9e24d26dab9c3f3d481d24f'
           protected = ['src', 'config', 'schemas', '.agents/skills/qing-agent-orchestrator', '.agents/skills/qing-agent-orchestrator-full/runtime/dist', '.agents/skills/qing-agent-orchestrator-full/runtime/config', 'artifacts/qing-agent-orchestrator-standard.zip']
           subprocess.run(['git', 'diff', '--exit-code', '--ignore-cr-at-eol', baseline, '--', *protected], check=True)
+          subprocess.run(['git', 'diff', '--exit-code', '--', '.github/workflows/ci.yml', '.github/workflows/release.yml'], check=True)
           before = json.loads(subprocess.check_output(['git','show',baseline+':package-lock.json'], text=True))
           after = json.loads(Path('package-lock.json').read_text(encoding='utf-8'))
           assert {k:v for k,v in before['packages'].items() if k} == {k:v for k,v in after['packages'].items() if k}, 'Dependency versions changed'
           print('Task source, permissions, standard ZIP, compiled JS and dependency versions unchanged.')
-      - name: Commit validated changes to this branch only and remove preparation helpers
+      - name: Commit validated content to this branch only and remove preparation helpers
         shell: pwsh
         env:
           TARGET_BRANCH: ${{ github.ref_name }}
@@ -79,7 +105,7 @@ jobs:
         run: |
           if ($env:TARGET_BRANCH -ne 'codex/node-22-24-26-compat') { throw 'Unexpected branch' }
           if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD) { throw 'Unexpected checkout revision' }
-          git add -- .node-version .github/workflows/ci.yml .github/workflows/release.yml package.json package-lock.json tests/node-compatibility.test.ts scripts/smoke-release-packages.py README.md README.en.md CHANGELOG.md CONTRIBUTING.md docs .agents/skills/qing-agent-orchestrator-full/references/codex-exec.md .agents/skills/qing-agent-orchestrator-full/runtime/package.json artifacts
+          git add -- .node-version package.json package-lock.json tests/node-compatibility.test.ts scripts/smoke-release-packages.py README.md README.en.md CHANGELOG.md CONTRIBUTING.md docs .agents/skills/qing-agent-orchestrator-full/references/codex-exec.md .agents/skills/qing-agent-orchestrator-full/runtime/package.json artifacts
           if ($LASTEXITCODE -ne 0) { throw 'Staging failed' }
           git rm -- .github/maintenance/node-compat.py .github/workflows/prepare-node-compat.yml
           if ($LASTEXITCODE -ne 0) { throw 'Helper removal failed' }
