@@ -9,6 +9,8 @@ on:
       - "v*.*.*"
     paths:
       - "package.json"
+      - ".node-version"
+      - "scripts/smoke-release-packages.py"
       - "package-lock.json"
       - ".agents/skills/qing-agent-orchestrator-full/runtime/package.json"
       - "CHANGELOG.md"
@@ -37,7 +39,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
+          check-latest: true
           cache: npm
 
       - name: Read and validate release version
@@ -155,6 +158,10 @@ jobs:
             }
             throw "The committed full-skill runtime differs from the release build."
           }
+
+      - name: Smoke-test the exact release ZIPs on the build LTS
+        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        run: python scripts/smoke-release-packages.py --expected-node 24
 
       - name: Create or update a draft release
         if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'

@@ -1,5 +1,9 @@
 # Qing-Agent-Orchestrator
 
+## v0.12.0 — Current Node.js compatibility
+
+Full tests on Windows/Linux with Node.js 22, 24 and 26; builds use 24 LTS and each matrix job smoke-tests the shipped ZIPs. The runtime minimum is 22; Standard remains Node-free. [Details](docs/node-support.md) · [Release](docs/release-notes-v0.12.0.md)
+
 ## v0.11.0 — Host-native permissions
 
 Qing chooses direct work or delegation automatically. Native calls reuse effective host permissions and exact task authorization without a second Qing confirmation. Standalone CLI enforcement remains separate. [Details](docs/host-permissions.md) · [Release](docs/release-notes-v0.11.0.md)
@@ -12,7 +16,7 @@ Only Luna, Sol and Astra are explicit task candidates. Role-specific efforts, sh
 
 Opt-in Astra, lossless compact context, conditional references, targeted cached probes and incremental logs reduce redundant work without weakening evidence or effect gates. See [v0.9.0](docs/release-notes-v0.9.0.md).
 
-[简体中文](README.md) · [v0.11.0 release notes](docs/release-notes-v0.11.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+[简体中文](README.md) · [v0.12.0 release notes](docs/release-notes-v0.12.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 **Let the model that understands, plans, and communicates well clarify the work; let Codex handle code and engineering execution.**
 
@@ -160,7 +164,7 @@ This release optimizes approval turns and orchestration consumption. It claims n
 
 ## Development
 
-Node.js 18 or newer is required:
+Node.js 24 LTS is recommended for development and the optional Relay; CI covers 22, 24 and 26, with a minimum of 22. Standard needs no Node.js:
 
 ```powershell
 npm install

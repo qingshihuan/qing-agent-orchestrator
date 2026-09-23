@@ -12,3 +12,6 @@ After an explicit selected-model availability rejection, try only the next healt
 
 ## v0.11 approval ownership
 The decision to use a process is automatic, not an extra consent screen. Dependency checks are read-only and host-controlled. An existing exact authorization can be conveyed by the trusted calling host without asking the user to repeat it; generated Handoffs never supply their own approvals. This standalone adapter has no native-session permission bridge: its execution opt-in, sandbox and scoped effect gates remain enforced. Prefer native subagents for normal work so the actual host applies its effective config directly.
+
+## Node.js runtime
+The optional standalone Relay is tested on Node.js 22, 24 and 26 (Windows/Linux); use the latest patch in one of these lines. Node.js 24 LTS is the recommended build/runtime baseline; 26 does not require a downgrade. The minimum engine declaration is 22, not a guarantee for untested future major versions. Native desktop workflows and the Standard edition do not need Node.js. Do not install or change the user's system runtime merely to load this skill.

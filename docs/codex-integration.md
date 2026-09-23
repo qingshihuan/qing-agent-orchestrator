@@ -77,3 +77,6 @@ Prefer `--compact` for agent-facing dispatch/start. Use `models probe --candidat
 Explicit candidates must use gpt-6-luna, gpt-6-sol or gpt-6-astra; unknown and retired models fail before submission. Migrate old saved configurations rather than silently renaming their model IDs. The runtime's safe inherit default does not control the parent's model.
 
 The CLI now shares one task scheduler per loaded configuration instance. It uses the exact selector chain, performs no speculative backup probes, and only preflights remaining fallbacks after an explicit selected-model runtime rejection. Authentication, task, cancellation, protocol, schema and timeout errors are not model-fallback triggers. Rejected-model health is invalidated for at most 60 seconds; explicit force refresh remains possible. Permission/profile/scope checks still apply. Sol/Luna minimum versions come from the installed catalog, not an invented fixed floor. See release-notes-v0.10.0.md.
+
+## Node.js 运行环境
+可选 Relay 支持本项目 CI 验证的 Node.js 22、24、26；建议 24 LTS，不要求降级已安装的 26。主要构建系列由 `.node-version` 指定，源码与预编译发布 ZIP 在六组平台/版本组合上测试。最低声明为 22，不再以 EOL 18/20 为支持基线。标准版及原生桌面调用不需要 Node.js。详情见 [Node.js 支持范围](node-support.md)。

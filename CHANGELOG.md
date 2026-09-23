@@ -1,6 +1,16 @@
 # Changelog
 
-本项目采用语义化版本编号。当前稳定版本为 `v0.11.0`；既有版本的历史记录与标签语义保持不变。
+本项目采用语义化版本编号。当前稳定版本为 `v0.12.0`；既有版本的历史记录与标签语义保持不变。
+
+## 0.12.0 - 2026-09-23
+
+### Changed
+
+- Test Node.js 22/24/26 on Windows and Linux, including the exact shipped CLI archives.
+- Use .node-version (24 LTS) for package and release builds; record actual tested patch versions.
+- Raise the maintained runtime minimum to Node 22 and retire Node 18/20 from supported CI.
+- Synchronize lockfile/runtime metadata without upgrading dependencies or changing model/permission behavior.
+- Standard ZIP content unchanged. See docs/node-support.md and docs/release-notes-v0.12.0.md.
 
 ## 0.11.0 - 2026-09-23
 
