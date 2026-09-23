@@ -11,7 +11,7 @@ The v0.13 controlled retest did not achieve the efficiency target. This change r
 - Observed exec turn usage is reported with explicit coverage gaps. A turn is not an API request; no exact bills, aggregate preflight/host usage or spend cap are invented. Native host manager limits are advisory, not enforced by SKILL.md.
 
 ## Rollout
-Source version 0.14.0-dev.1 and regenerated repository ZIPs are a frozen experimental candidate. The stable v0.13 Release is not replaced. A new stable release requires a separate connected experiment using identical frozen tasks/acceptance and recorded models/efforts/cache conditions. Main CI proves software behavior, not token/time savings.
+At the maintainer's explicit release request, v0.14.0 now distributes the architecture previously merged as 0.14.0-dev.1. The execute-single controller remains experimental and opt-in. No connected experiment was added during publication, and no performance benefit is claimed. The unchanged v0.13 tag and assets remain available. Main CI proves software behavior, not token/time savings; efficiency conclusions still require identical frozen tasks/acceptance and recorded models/efforts/cache conditions.
 
 Compare solo Astra, single-owner Astra (routing tax), whole-task selected model and that same model solo; keep FIRST skill loading as a separate strict-compatibility track. Count all parent/worker/preflight/retry usage and failures; isolate controller costs. The proposed 20% speed/cost improvement and nonincreasing tokens are acceptance targets, not results. No automatic model downshift is justified by unverified unit prices.
 

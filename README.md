@@ -1,8 +1,8 @@
 # 青-Agent-Orchestrator
 
-## Experimental single-owner architecture (0.14.0-dev.1)
+## v0.14.0 — 单执行者架构
 
-单执行者完成完整任务；执行拓扑、独立审查、权限分别判断。新增程序化 execute-single，不增加常驻管理模型。源码与仓库 ZIP 是待实测候选，稳定 Release 保持 v0.13.0；没有已实现的速度/费用节省比例。 See [architecture and limits](docs/single-owner.md).
+单执行者架构已提供 v0.14.0 下载：默认一个负责人完整完成任务，执行拓扑、独立审查和权限分别判断。新增的 execute-single 控制器仍为实验性、显式启用功能；尚未证明真实任务提速或省费。[发布说明](docs/release-notes-v0.14.0.md) · [架构与限制](docs/single-owner.md)
 
 
 ## v0.13.0 — 优先减少父任务轮次与重复工作
@@ -25,7 +25,7 @@ Qing 自动决定直接完成或委派，原生调用复用宿主当前权限与
 
 Astra 按需启用而非全局默认；紧凑执行上下文、分层读取规则、定向缓存预检和增量日志减少重复工作。完整验收和效果审批不变。 See [v0.9.0](docs/release-notes-v0.9.0.md).
 
-[English](README.en.md) · [v0.12.0 发布说明](docs/release-notes-v0.12.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
+[English](README.en.md) · [v0.14.0 发布说明](docs/release-notes-v0.14.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
 **由一个合适的执行者完整完成任务；不默认叠加持续工作的管理模型。**
 
