@@ -1,0 +1,97 @@
+name: Prepare parent-overhead optimization
+on:
+  push:
+    branches: [codex/parent-overhead-v0.13.0]
+    paths:
+      - .github/maintenance/parent-overhead.py
+      - .github/workflows/prepare-parent-overhead.yml
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.repository == 'qingshihuan/qing-agent-orchestrator' && github.actor == 'qingshihuan'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Apply scoped source and instruction changes
+        shell: pwsh
+        run: |
+          python .github/maintenance/parent-overhead.py
+          if ($LASTEXITCODE -ne 0) { throw 'Source transformation failed' }
+      - name: Use actionable implementation wording in the automatic-routing fixture
+        shell: python
+        run: |
+          from pathlib import Path
+          for name in ['tests/parent-overhead.test.ts', 'scripts/measure-parent-overhead.mjs']:
+              p = Path(name)
+              source = p.read_text(encoding='utf-8')
+              assert '按固定接口独立交付完整模块' in source
+              p.write_bytes(source.replace('按固定接口独立交付完整模块', '按固定接口独立实现完整模块').encode('utf-8'))
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Run every regression test
+        shell: pwsh
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          npm test *> "$env:RUNNER_TEMP/qing-parent-tests.log"
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Select-String -Path "$env:RUNNER_TEMP/qing-parent-tests.log" -Pattern '^not ok|^✖' -Context 0,25
+            Get-Content "$env:RUNNER_TEMP/qing-parent-tests.log" -Tail 100
+            throw 'Complete test suite failed; no generated source or ZIP is committed'
+          }
+          Get-Content "$env:RUNNER_TEMP/qing-parent-tests.log" -Tail 12
+      - name: Measure entry bytes and compare actual baseline routing without a model
+        run: node scripts/measure-parent-overhead.mjs
+      - name: Rebuild and validate both installable editions
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/parent-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Verify exact shipped CLI entry points on Node 24
+        run: python scripts/smoke-release-packages.py --expected-node 24
+      - name: Check permission, model, budget and dependency boundaries
+        shell: python
+        run: |
+          import json, subprocess
+          from pathlib import Path
+          baseline = 'f5bc980173dc3117ac035f0def26483885a5ade4'
+          paths = ['config', 'schemas', 'src/safety-gate.ts', 'src/config.ts', 'src/model-router.ts', 'src/model-scheduler.ts', 'src/model-health.ts', 'src/native-permissions.ts', 'src/executors', 'src/relay.ts', 'src/reviewer.ts', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.node-version']
+          subprocess.run(['git','diff','--exit-code','--ignore-cr-at-eol',baseline,'--',*paths],check=True)
+          before = json.loads(subprocess.check_output(['git','show',baseline+':package-lock.json'],text=True))
+          after = json.loads(Path('package-lock.json').read_text(encoding='utf-8'))
+          assert {k:v for k,v in before['packages'].items() if k} == {k:v for k,v in after['packages'].items() if k}
+          print('Model parameters, effective permissions, safety gates, Relay evidence and locked dependencies unchanged.')
+      - name: Commit verified changes to this branch only and remove temporary helpers
+        shell: pwsh
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+          EXPECTED_HEAD: ${{ github.sha }}
+        run: |
+          if ($env:TARGET_BRANCH -ne 'codex/parent-overhead-v0.13.0') { throw 'Unexpected branch' }
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD) { throw 'Unexpected checkout' }
+          git add -- src tests .agents/skills artifacts docs package.json package-lock.json README.md README.en.md CHANGELOG.md scripts/measure-parent-overhead.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Staging failed' }
+          git rm -- .github/maintenance/parent-overhead.py .github/workflows/prepare-parent-overhead.yml
+          if ($LASTEXITCODE -ne 0) { throw 'Helper cleanup failed' }
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Reduce Direct overhead and require useful complete delegation for v0.13.0'
+          if ($LASTEXITCODE -ne 0) { throw 'Commit failed' }
+          git push origin "HEAD:refs/heads/$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Branch changed or push denied; no force push permitted' }
