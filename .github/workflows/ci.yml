@@ -13,13 +13,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: [18, 22]
+        node: [22, 24, 26]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          check-latest: true
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
@@ -31,6 +32,12 @@ jobs:
           TMP: ${{ runner.temp }}
           TMPDIR: ${{ runner.temp }}
         run: npm test
+      - name: Record actual compatibility runtime
+        run: |
+          node --version
+          npm --version
+      - name: Smoke-test committed release ZIPs on this Node version
+        run: python scripts/smoke-release-packages.py --expected-node ${{ matrix.node }}
 
   package-skill:
     needs: build-and-test
@@ -39,7 +46,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
+          check-latest: true
           cache: npm
       - name: Preserve committed archives for semantic comparison
         shell: pwsh
