@@ -1,7 +1,16 @@
 # Changelog
 
-本项目采用语义化版本编号。当前稳定版本为 `v0.13.0`；既有版本的历史记录与标签语义保持不变。
+本项目采用语义化版本编号。当前发布版本为 `v0.14.0`（单执行者控制器仍为实验性功能，性能收益尚未实测）；既有版本的历史记录与标签语义保持不变。
 
+## 0.14.0 - 2026-09-24
+
+### Changed
+
+- Publish the merged single-owner architecture and matching skill archives; keep execute-single explicitly experimental and opt-in.
+- Separate whole-task ownership, independent review and effective authorization; remove automatic parallel/slice team promotion.
+- Programmatic acceptance, protected inputs, cooperative workspace leases and qualified turn-usage reporting replace standing manager coordination in the new controller.
+- Preserve required review, real execution gates, model defaults and Node 22/24/26 coverage. No dependencies or runtime policy changed during release preparation.
+- No connected-model speed, token or cost improvement is claimed. See docs/release-notes-v0.14.0.md.
 ## 0.13.0 - 2026-09-23
 
 ### Changed

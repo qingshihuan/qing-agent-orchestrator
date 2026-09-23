@@ -1,8 +1,8 @@
 # Qing-Agent-Orchestrator
 
-## Experimental single-owner architecture (0.14.0-dev.1)
+## v0.14.0 — Single-owner architecture
 
-单执行者完成完整任务；执行拓扑、独立审查、权限分别判断。新增程序化 execute-single，不增加常驻管理模型。源码与仓库 ZIP 是待实测候选，稳定 Release 保持 v0.13.0；没有已实现的速度/费用节省比例。 See [architecture and limits](docs/single-owner.md).
+v0.14.0 distributes one complete implementation owner, with topology, independent review and authority decided separately. The opt-in execute-single controller remains experimental; connected-model speed, token and cost gains are not established. [Release notes](docs/release-notes-v0.14.0.md) · [Architecture and limits](docs/single-owner.md)
 
 
 ## v0.13.0 — Parent-round and coordination overhead
@@ -25,7 +25,7 @@ Only Luna, Sol and Astra are explicit task candidates. Role-specific efforts, sh
 
 Opt-in Astra, lossless compact context, conditional references, targeted cached probes and incremental logs reduce redundant work without weakening evidence or effect gates. See [v0.9.0](docs/release-notes-v0.9.0.md).
 
-[简体中文](README.md) · [v0.12.0 release notes](docs/release-notes-v0.12.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+[简体中文](README.md) · [v0.14.0 release notes](docs/release-notes-v0.14.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 **Let the model that understands, plans, and communicates well clarify the work; let Codex handle code and engineering execution.**
 
