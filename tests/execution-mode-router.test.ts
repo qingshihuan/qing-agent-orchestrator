@@ -49,7 +49,7 @@ test("only bounded full-edition conditions recommend CLI", () => {
     assert.equal(full.mode, "cli-recommended", goal);
     assert.equal(full.recommendation?.message, "建议切换 CLI 模式");
     assert.equal(full.reasonCodes.includes(reason), true, goal);
-    assert.equal(full.recommendation?.requiresUserChoice, true);
+    assert.equal(full.recommendation?.requiresUserChoice, false);
     const standard = routeExecutionMode(goal, "standard", "codex");
     assert.equal(standard.mode, "desktop-native", goal);
     assert.deepEqual(standard.reasonCodes, []);

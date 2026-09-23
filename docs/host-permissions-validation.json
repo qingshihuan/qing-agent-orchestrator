@@ -1,0 +1,22 @@
+{
+  "baseline": "5abbe6f026b7adeb6419ad0253b72e036d24eafd",
+  "validation": "unit/CLI contract and archive checks; not live desktop approval UI",
+  "nativeAuthority": "host-effective-session",
+  "nativeMetadataGrantsPermissions": false,
+  "standaloneEnforcementUnchanged": {
+    "src/safety-gate.ts": "190f29a0991e0ea191304e508ee0c01057b1843e5cd1df8bfa9132c52bc64d12",
+    "src/config.ts": "4c50c633cd3e3575d91021464ef2bd79bd70cabdd134479b850a1776bdb7d08e",
+    "src/executors/codex-exec-executor.ts": "33a2164e908d5f4322178572524790a7b4ad5c4952bf9f92f61742120fbf1fda",
+    "src/model-router.ts": "328097c43c2b453d34224e6f277ceca1f1f3946b8e9aa3f5cd9668a119e0dd95",
+    "src/model-health.ts": "43134ff03d1795cd5be6f2864dd285d9c719f2d456c14c147199674f661d5c93",
+    "src/model-scheduler.ts": "48501d4caa638f444f9a4e251374a4802bbf3e82263e615439c8a72e4e622712",
+    "src/relay.ts": "262edb043f7e09a0909f0d4ee2dbe7436cf02105b61b3c968136016d3a9f04e5",
+    "src/reviewer.ts": "9bfb1fc312dcb993b9c8f1bec8a7f51784fb91d91429abaa6af89f83438d263e"
+  },
+  "baselineThreadToolsOccurrences": [],
+  "limits": [
+    "No config.toml edited or live desktop permission state accessed",
+    "No connected model/account calls or real approval-dialog count",
+    "No trusted standalone cross-process host permission bridge"
+  ]
+}

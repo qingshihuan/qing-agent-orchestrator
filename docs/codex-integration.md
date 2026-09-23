@@ -4,38 +4,17 @@ CLI 是完整版的条件能力，不是完整版的启动依赖。标准版没�
 
 `start`/`prepare` 先经过自适应编排：Direct 直接返回父任务状态且不分配模型、不探测 CLI、不调用 Planner；Lite 只返回桌面单 Executor 合同；只有 Full 才能进入 local 或 connected Handoff 规划。配置 `orchestration.mode=full` 是显式强制 Full 的兼容入口。
 
-## 何时建议
+## 自动选择和只读检查
 
-仅允许稳定 reason code：
+Qing 仅在明确 CLI/CI、持久运行、机器控制或隔离等需求下选择进程方式。普通复杂工程保持原生子智能体。选择方式不再额外询问接受/拒绝；dispatch 自动只读检查，审计为 auto-selected。--no-model-probe 阻止发现和模型调用并返回 CLI_DEPENDENCY_CHECK_REQUIRED，--cli-response auto 可由宿主驱动继续；accept/decline 仍兼容，拒绝不再提示。
 
-- explicit-cli-request
-- script-or-ci
-- scheduled-batch-unattended
-- app-close-persistence
-- machine-readable-control-plane
-- cli-only-model-or-environment
-- process-isolation-or-queue
+检查不会安装、登录、变更配置或执行任务。缺少能力只要求处理真正的缺口。安装、账户访问或新外部效果需要实际任务/宿主授权；同一授权不重复询问。
 
-普通代码、复杂任务和长时间交互工作保持 desktop-native。
+## 独立进程授权边界
 
-## 接受前
+原生父任务/子智能体直接使用宿主的当前有效权限。单独运行的 Relay 不具备可信的父会话权限桥接，不能从单个 config.toml、截图或生成的 Handoff 取得授权。现有 sandbox、allowedPaths、网络、证据和模型参数边界不变。
 
-初始建议只显示“建议切换 CLI 模式”、收益和接受/拒绝选项。不得调用 doctor、models probe、安装、登录、创建任务或执行 Handoff。
-
-拒绝后进入 desktop-fallback-selected，继续桌面工作并禁止当前任务重复提示。
-
-## 接受后
-
-1. scripts/qing.ps1 doctor 检查可用性和认证，不提交任务。
-2. 缺失或未登录时，参考[官方 Codex CLI 文档](https://learn.chatgpt.com/docs/codex/cli)。
-3. 全局安装或配置修改需要独立 Handoff/gate。
-4. CLI 就绪后创建新的任务 Handoff。
-5. 真实执行要求：
-   - executor.codexExec.enabled=true；
-   - --allow-real-execution；
-   - 所有 REQUIRE_APPROVAL gate 已批准。
-
-安全、已声明的 Handoff 不需要单独批准。`--approve-handoff` 仅作为旧调用兼容字段保留；若提供则必须匹配 exact ID。删除、全局/系统写入、密钥、私有/认证访问、外部写入、push、部署、购买、破坏性迁移或重大范围扩展仍需要对应 gate。
+真实进程执行仍要求 executor.codexExec.enabled=true、--allow-real-execution 和精确效果 gate。已有明确授权可由调用宿主传递为机器参数，无需让用户重复手工输入；模型不得伪造授权。--approve-handoff 仅为旧兼容字段，安全计划本身不是审批点。不要为免提示强制设置 never/full-access 或换后端规避拒绝。
 
 ## 模型和推理强度
 
@@ -77,7 +56,7 @@ Executor 返回后，声明的 testPlan 由 Relay 父进程独立执行并绑定
 - modelRouting.mode=inherit；
 - approvedGateIds=[]。
 
-它不包含 codex.exe。用户接受建议、完成依赖检查并显式提供 `--allow-real-execution` 前，包内能力不会执行真实任务；高风险效果还必须通过对应 gate。
+它不包含 codex.exe。调用方完成依赖检查并在授权范围内显式提供 `--allow-real-execution` 前，包内能力不会执行真实任务；高风险效果还必须通过对应 gate。
 
 ## 未实现或未在本轮证明
 

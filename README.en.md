@@ -1,5 +1,9 @@
 # Qing-Agent-Orchestrator
 
+## v0.11.0 — Host-native permissions
+
+Qing chooses direct work or delegation automatically. Native calls reuse effective host permissions and exact task authorization without a second Qing confirmation. Standalone CLI enforcement remains separate. [Details](docs/host-permissions.md) · [Release](docs/release-notes-v0.11.0.md)
+
 ## v0.10.0 — GPT-6-only task scheduling
 
 Only Luna, Sol and Astra are explicit task candidates. Role-specific efforts, shared invocation checks and lazy fallbacks reduce redundant work. Migrate old explicit configs; safe installation and parent defaults are unchanged. See [release notes](docs/release-notes-v0.10.0.md).
@@ -8,7 +12,7 @@ Only Luna, Sol and Astra are explicit task candidates. Role-specific efforts, sh
 
 Opt-in Astra, lossless compact context, conditional references, targeted cached probes and incremental logs reduce redundant work without weakening evidence or effect gates. See [v0.9.0](docs/release-notes-v0.9.0.md).
 
-[简体中文](README.md) · [v0.10.0 release notes](docs/release-notes-v0.10.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+[简体中文](README.md) · [v0.11.0 release notes](docs/release-notes-v0.11.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 **Let the model that understands, plans, and communicates well clarify the work; let Codex handle code and engineering execution.**
 
@@ -38,7 +42,7 @@ Availability is a current host/runtime snapshot and can drift with version, acco
 
 ## v0.8.1 maintenance update
 
-This release fixes concurrent health-cache initialization, stale candidate status, split UTF-8 output, and repeated process cancellation in the full runtime. It avoids redundant probes and releases completed output buffers. The bundled runtime and full ZIP are synchronized; standard-edition content, model choices, orchestration budgets, and effect gates are unchanged. See the [v0.10.0 release notes](docs/release-notes-v0.10.0.md).
+This release fixes concurrent health-cache initialization, stale candidate status, split UTF-8 output, and repeated process cancellation in the full runtime. It avoids redundant probes and releases completed output buffers. The bundled runtime and full ZIP are synchronized; standard-edition content, model choices, orchestration budgets, and effect gates are unchanged. See the [v0.11.0 release notes](docs/release-notes-v0.11.0.md).
 
 ## v0.8.0 release highlights
 

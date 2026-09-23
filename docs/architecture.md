@@ -14,7 +14,7 @@
 
 桌面标准版只包含技能指令、Handoff、安全闸门和 Reviewer 规则。它使用桌面专用、非进程型 Handoff/Review schema，没有 scripts、runtime、进程启动器或外部执行依赖。完整版 runtime 继续使用独立的 Relay 进程 schema。
 
-完整版包含相同桌面能力和可选 Relay。通常仍用父任务与内部子任务；仅命中稳定 reason code 时提出 CLI 建议。拒绝后回退桌面，接受后才检查依赖和创建新的 CLI Handoff。
+完整版包含相同桌面能力和可选 Relay。通常仍用父任务与内部子任务；仅命中稳定 reason code 时自动选择可选进程路线。明确拒绝后回退桌面；只读检查和规划在宿主授权范围内进行，不增加路由选择确认。
 
 ## 数据流
 
@@ -24,7 +24,7 @@
          → Direct: parent, 0 child
          → Lite: 1 Executor → parent verification
          → Full: Handoff → effect gates → Executor → independent Reviewer
-      → optional process recommendation → accept/decline
+      → optional process route → host-permitted read-only checks
 
 Direct 默认把安全单一范围工作留在父任务。Lite/Full 子任务仍把结果返回父任务；只有明确要求或需要独立观察/隔离时才创建可见任务。
 
@@ -43,9 +43,9 @@ Luna 处理 trivial/normal；Sol 负责复杂规划、执行与独立审查；As
 - 规划、执行和审查证据分离。
 - route/recommendation 不启动进程。
 - 拒绝 CLI 后继续桌面并禁止当前任务重复提示。
-- 接受建议只进入只读依赖检查，不等于安装或真实任务启动。
-- Handoff 本身不是审批点；仅 delete/global/system/secrets/private/authenticated network/external write/push/deploy/purchase/destructive migration/scope expansion 等效果进入 gate。
-- 同步 gate 不用 URL 语法猜测 DNS/主机是否公开。`network_read` 仅对 README 列出的精确审查主机自动允许，并拒绝免批 userinfo、敏感 query、fragment、IP literal 与本地/私有名称；其他 HTTPS 进入审批，旧 `network_access` 保持 gated 兼容语义。
+- 自动进程路由只进入只读依赖检查，不等于安装或真实任务启动；--no-model-probe 完全阻止检查。
+- Handoff 本身不是审批点；原生路径由宿主处理真实效果授权，已授权范围不重复提示。独立 Relay 继续对 delete/global/system/secrets/private/authenticated network/external write/push/deploy/purchase/destructive migration/scope expansion 等效果执行原有 gate。
+- 独立 Relay 同步 gate 不用 URL 语法猜测 DNS/主机是否公开。`network_read` 仅对 README 列出的精确审查主机自动允许，并拒绝免批 userinfo、敏感 query、fragment、IP literal 与本地/私有名称；其他 HTTPS 进入审批，旧 `network_access` 保持 gated 兼容语义。
 - 新 Handoff 固化 tier、childAgentBudget、independentReviewer 和 maxRevisions。`execute` 与旧 `run` 在启动 Relay 前校验该合同没有超过当前配置，并把迭代数限制为 relay 配置、Handoff `maxIterations` 和 `maxRevisions + 1` 的最小值；旧 Handoff 没有该字段时从当前自适应路由派生预算。
 - 同后端模型替换只有在完整显式 scope 证明确认 operations/allowedPaths/sandbox/permissions/effects 不变时复用 gate；缺失/不完整证明或任一变化都重新审批。
 - 显式 fallback 链耗尽后失败关闭，不隐式落到无关候选；认证和非模型进程/协议失败不进入回退链。
@@ -74,3 +74,7 @@ Luna 处理 trivial/normal；Sol 负责复杂规划、执行与独立审查；As
 
 heartbeat 仅表达 Relay 尚未观察到退出。测试真值来自 Relay 父进程按 Handoff testPlan 执行并绑定的证据，不来自 Executor 自述或 JSONL 命令日志。
 
+
+## v0.11 宿主权限归属
+
+原生控制输出保留不可授权的 permissionHandling 元数据；桌面 REQUIRE_APPROVAL 映射为 HOST_PERMISSION_CHECK_REQUIRED，DENY 仍拒绝。完整效果报告不丢失；只有宿主的当前有效权限和实际任务范围决定是否需要提示。元数据不是授权令牌，独立 CLI 无权复用它绕过自己的 gate。参见 host-permissions.md。

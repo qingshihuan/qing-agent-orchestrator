@@ -41,13 +41,14 @@ export type CliReasonCode =
   | "cli-only-model-or-environment"
   | "process-isolation-or-queue";
 export type CliDependencyStatus = "not-checked" | "missing" | "authentication-required" | "ready";
-export type CliRecommendationResponse = "pending" | "accepted" | "declined";
+export type CliRecommendationResponse = "pending" | "accepted" | "declined" | "auto-selected";
 
 export interface CliRecommendation {
   message: "建议切换 CLI 模式";
   benefit: string;
   reasonCodes: CliReasonCode[];
-  requiresUserChoice: true;
+  /** Routing is decided by Qing; this never grants permission to execute. */
+  requiresUserChoice: false;
   response: CliRecommendationResponse;
   dependencyStatus: CliDependencyStatus;
   installGuide: "https://learn.chatgpt.com/docs/codex/cli";

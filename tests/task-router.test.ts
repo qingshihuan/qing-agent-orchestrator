@@ -239,7 +239,7 @@ test("dispatch exposes Direct, Lite, Full-ready, and gated Full without silent e
     const recommendation = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "把它接入 GitHub Actions CI", "--workspace", workspace, "--config", "config/relay.example.json", "--no-model-probe"] });
     assert.equal(recommendation.exitCode, 0, recommendation.stderr);
     const pending = JSON.parse(recommendation.stdout) as Record<string, unknown>;
-    assert.equal(pending.status, "CLI_RECOMMENDATION_REQUIRED");
+    assert.equal(pending.status, "CLI_DEPENDENCY_CHECK_REQUIRED");
     assert.equal(pending.handoffId, null);
     assert.match(JSON.stringify(pending), /建议切换 CLI 模式/);
 
@@ -254,7 +254,7 @@ test("dispatch exposes Direct, Lite, Full-ready, and gated Full without silent e
     const gated = await runner.run({ ...base, args: ["dist/src/cli.js", "dispatch", "--task", "实现修复并部署到生产环境", "--workspace", workspace, "--config", "config/relay.example.json", "--no-model-probe"] });
     assert.equal(gated.exitCode, 0, gated.stderr);
     const gatedOutput = JSON.parse(gated.stdout) as { status: string; safetyGate: { outcome: string }; orchestration: { independentReviewer: boolean }; reviewerModelSelection: { role: string } };
-    assert.equal(gatedOutput.status, "AWAITING_APPROVAL");
+    assert.equal(gatedOutput.status, "HOST_PERMISSION_CHECK_REQUIRED");
     assert.equal(gatedOutput.safetyGate.outcome, "REQUIRE_APPROVAL");
     assert.equal(gatedOutput.orchestration.independentReviewer, true);
     assert.equal(gatedOutput.reviewerModelSelection.role, "reviewer");

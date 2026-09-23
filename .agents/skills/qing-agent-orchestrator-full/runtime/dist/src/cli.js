@@ -24,6 +24,7 @@ import { bindHandoffOrchestration, legacyV07HandoffFingerprint, resolveExecutabl
 import { validateExecutionResult, validateHandoff } from "./validation.js";
 import { resolveSafeWorkspace } from "./workspace.js";
 const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+import { nativeFullControl, nativePermissionHandling } from "./native-permissions.js";
 let compactMode = false;
 function record(value) {
     return value && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -56,6 +57,8 @@ function compactControlPlane(value) {
         "DENIED",
         "CLI_RECOMMENDATION_REQUIRED",
         "CLI_SETUP_REQUIRED",
+        "CLI_DEPENDENCY_CHECK_REQUIRED",
+        "HOST_PERMISSION_CHECK_REQUIRED",
     ]);
     if (!supported.has(source.status))
         return value;
@@ -69,6 +72,9 @@ function compactControlPlane(value) {
     });
     return {
         status: source.status,
+        permissionHandling: source.permissionHandling ?? null,
+        executionMode: execution?.mode ?? null,
+        cliRecommendation: execution?.recommendation ?? null,
         executionOwner: source.executionOwner ?? execution?.executionOwner ?? null,
         route: source.route ?? null,
         category: source.category ?? null,
@@ -173,6 +179,7 @@ function desktopDelegationContract(selection) {
         delegationTarget: "internal-child",
         parentModelUnchanged: true,
         modelSelectionScope: "delegated-task",
+        permissionHandling: nativePermissionHandling,
         override: selection ? { model: selection.model, reasoningEffort: selection.reasoningEffort } : null,
         spawnAgent: selection ? { model: selection.model, reasoning_effort: selection.reasoningEffort } : null,
         fieldMapping: { router: "reasoningEffort", hostInvocation: "reasoning_effort" },
@@ -211,8 +218,8 @@ function usage() {
         "",
         "Commands:",
         "  doctor [--config <file>|--relay-config <file>]",
-        "  dispatch --task <goal> --workspace <project> [--edition standard|full] [--cli-response accept|decline] [--config <file>] [--no-model-probe] [--compact]",
-        "       desktop is the default; a full-edition CLI condition first returns a recommendation and waits for a user choice",
+        "  dispatch --task <goal> --workspace <project> [--edition standard|full] [--cli-response auto|accept|decline] [--config <file>] [--no-model-probe] [--compact]",
+        "       desktop is the default; Qing selects the route automatically; no-model-probe returns a side-effect-free inspection plan",
         "  models list|probe [--config <file>]",
         "  status [run-id] [--config <file>]",
         "  logs <run-id> [--config <file>]",
@@ -282,26 +289,30 @@ async function main() {
         const decision = routeTask(task, { edition: editionValue(args), orchestration: config.orchestration });
         let execution = decision.execution;
         const cliResponse = flagValue(args, "--cli-response");
-        if (cliResponse !== undefined && cliResponse !== "accept" && cliResponse !== "decline") {
-            throw new Error("--cli-response must be accept or decline");
+        if (cliResponse !== undefined && cliResponse !== "accept" && cliResponse !== "decline" && cliResponse !== "auto") {
+            throw new Error("--cli-response must be auto, accept or decline");
+        }
+        if (decision.orchestration.tier === "direct") {
+            print({ ...decision, execution, status: "DIRECT_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffId: null, handoffPath: null, modelSelection: null, reviewerModelSelection: null, delegationInvocation: null, modelProbe: "not-applicable", nextStep: "Complete and, when executable, verify the in-scope work directly. No child, model allocation, Handoff approval, or CLI task was created." });
+            return;
         }
         if (execution.mode === "cli-recommended") {
-            if (!cliResponse) {
-                print({ ...decision, status: "CLI_RECOMMENDATION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "not-started", nextStep: `${execution.recommendation?.message}: ${execution.recommendation?.benefit} Ask the user to accept or decline. No CLI dependency check or task was started.` });
+            if (!cliResponse && args.includes("--no-model-probe")) {
+                print({ ...decision, execution, permissionHandling: nativePermissionHandling, status: "CLI_DEPENDENCY_CHECK_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "not-started", nextStep: "Qing selected the process route, not a user-choice prompt. The explicit no-model-probe flag prevents discovery and planning calls. Continue with host-permitted read-only checks using --cli-response auto when appropriate; do not ask the user to choose a routing tier or approve this plan. This is not authorization for installation or task execution." });
                 return;
             }
             if (cliResponse === "decline") {
                 execution = await respondToCliRecommendation(execution, "decline");
             }
             else {
-                execution = await respondToCliRecommendation(execution, "accept", {
+                execution = await respondToCliRecommendation(execution, cliResponse ?? "auto", {
                     inspect: async () => {
                         const report = await new CodexExecExecutor(codexOptions(config)).doctor(true);
                         return !report.available ? "missing" : !report.authenticated ? "authentication-required" : "ready";
                     },
                 });
                 if (execution.mode === "cli-setup-required") {
-                    print({ ...decision, execution, status: "CLI_SETUP_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "dependency-check-only", nextStep: `Follow ${execution.recommendation?.installGuide}; any installation or configuration change needs its own approval. No task was started.` });
+                    print({ ...decision, execution, status: "CLI_SETUP_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, modelProbe: "dependency-check-only", nextStep: `See ${execution.recommendation?.installGuide}. Continue desktop-capable work when possible; check only the missing installation or authentication scope through the host. Reuse existing exact authorization rather than asking to approve a route. No installation, login or task was started.` });
                     return;
                 }
             }
@@ -309,21 +320,17 @@ async function main() {
         else if (cliResponse) {
             throw new Error("--cli-response is valid only when a full-edition CLI condition is pending.");
         }
-        if (decision.orchestration.tier === "direct") {
-            print({ ...decision, execution, status: "DIRECT_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: null, reviewerModelSelection: null, delegationInvocation: null, modelProbe: "not-applicable", nextStep: "Complete and, when executable, verify the in-scope work directly. No child, model allocation, Handoff approval, or CLI task was created." });
-            return;
-        }
         if (execution.mode === "desktop-native" || execution.mode === "desktop-fallback") {
             const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
             if (decision.orchestration.tier === "lite") {
-                print({ ...decision, execution, status: "LITE_EXECUTION_REQUIRED", handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, reviewerModelSelection: null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Create at most one Executor child, perform targeted parent verification, and allow at most one revision; no independent Reviewer or plan approval is required." });
+                print({ ...decision, execution, status: "LITE_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffId: null, handoffPath: null, modelSelection: bundle?.selection ?? null, reviewerModelSelection: null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Create at most one Executor child, perform targeted parent verification, and allow at most one revision; no independent Reviewer or plan approval is required." });
                 return;
             }
             const workspace = await resolveSafeWorkspace(runtimeRoot, requestedWorkspace);
             const handoff = createPendingDispatchHandoff(task, workspace, decision);
             const gate = evaluateSafetyGate(handoff);
             const reviewerBundle = await configuredModel(config, "reviewer", "desktop-child", task, decision);
-            print({ ...decision, execution, status: gate.outcome === "ALLOW" ? "FULL_EXECUTION_READY" : gate.outcome === "DENY" ? "DENIED" : "AWAITING_APPROVAL", handoffId: handoff.id, handoffPath: null, handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, reviewerModelSelection: reviewerBundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), reviewerInvocation: desktopDelegationContract(reviewerBundle?.selection ?? null), modelProbe: "not-applicable", nextStep: gate.outcome === "ALLOW" ? "Run the bounded Executor and independent Reviewer workflow now; no plan approval is needed." : gate.outcome === "DENY" ? "Revise the unsafe Handoff; denial cannot be approved away." : "Request one approval bundle containing only the displayed effect gate IDs, then continue." });
+            print({ ...decision, execution, ...nativeFullControl(gate.outcome), handoffId: handoff.id, handoffPath: null, handoff, safetyGate: gate, modelSelection: bundle?.selection ?? null, reviewerModelSelection: reviewerBundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), reviewerInvocation: desktopDelegationContract(reviewerBundle?.selection ?? null), modelProbe: "not-applicable" });
             if (gate.outcome === "DENY")
                 process.exitCode = 2;
             return;
@@ -394,12 +401,12 @@ async function main() {
         }
         const decision = routeTask(task, { edition: "full", orchestration: config.orchestration });
         if (decision.orchestration.tier === "direct") {
-            print({ ...decision, status: "DIRECT_EXECUTION_REQUIRED", handoffPath: null, plannerSource: null, modelSelection: null, modelProbe: "not-applicable", nextStep: "Complete this task directly. Start did not create a Handoff, allocate a model, probe the CLI, or invoke any Planner." });
+            print({ ...decision, status: "DIRECT_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffPath: null, plannerSource: null, modelSelection: null, modelProbe: "not-applicable", nextStep: "Complete this task directly. Start did not create a Handoff, allocate a model, probe the CLI, or invoke any Planner." });
             return;
         }
         if (decision.orchestration.tier === "lite") {
             const bundle = await configuredModel(config, "executor", "desktop-child", task, decision);
-            print({ ...decision, status: "LITE_EXECUTION_REQUIRED", handoffPath: null, plannerSource: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Use at most one desktop Executor child and parent verification. Start did not invoke the connected or local Handoff Planner." });
+            print({ ...decision, status: "LITE_EXECUTION_REQUIRED", permissionHandling: nativePermissionHandling, handoffPath: null, plannerSource: null, modelSelection: bundle?.selection ?? null, delegationInvocation: desktopDelegationContract(bundle?.selection ?? null), modelProbe: "not-applicable", nextStep: "Use at most one desktop Executor child and parent verification. Start did not invoke the connected or local Handoff Planner." });
             return;
         }
         let planned;
