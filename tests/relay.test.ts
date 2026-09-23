@@ -90,7 +90,7 @@ test("v0.8 enforced Direct and Lite phases change Relay control flow and child i
 
   const liteHandoff = await exampleHandoff();
   liteHandoff.metadata = { ...liteHandoff.metadata, orchestrationPolicyVersion: "0.8" };
-  liteHandoff.objective = "先规划接口，然后实现并测试剩余的本地修复";
+  liteHandoff.objective = "使用 Qing Lite：先规划接口，然后实现并测试剩余的本地修复";
   const liteExecutor = new CountingExecutor([{ type: "read", target: "src/game-visual-analyzer/fixture.ts", reason: "Verify a local fixture before parent acceptance.", risk: "low" }]);
   const liteReviewer = new CountingReviewer();
   const lite = await new Relay(liteExecutor, liteReviewer).run(liteHandoff, { maxIterations: 1, approvedGateIds: [] });

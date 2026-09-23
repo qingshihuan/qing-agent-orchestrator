@@ -1,6 +1,15 @@
 # Changelog
 
-本项目采用语义化版本编号。当前稳定版本为 `v0.12.0`；既有版本的历史记录与标签语义保持不变。
+本项目采用语义化版本编号。当前稳定版本为 `v0.13.0`；既有版本的历史记录与标签语义保持不变。
+
+## 0.13.0 - 2026-09-23
+
+### Changed
+
+- Direct fast path avoids routing-only rounds and unnecessary control-plane calls.
+- Evidence-based delegation benefit gate replaces complexity-only Lite promotion; preserve Full obligations and explicit bounded delegation.
+- Lite transfers complete tested work, avoids parent duplication and groups revisions.
+- Smaller conditional skill entries, new routing/CLI contract tests, synchronized archives and evidence boundaries.
 
 ## 0.12.0 - 2026-09-23
 

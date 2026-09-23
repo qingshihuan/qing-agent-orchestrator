@@ -1,0 +1,69 @@
+{
+  "baseline": "f5bc980173dc3117ac035f0def26483885a5ade4",
+  "method": "UTF-8 entry bytes and pure routing on synthetic fixed inputs; no host/model calls",
+  "skills": {
+    "qing-agent-orchestrator": {
+      "beforeBytes": 3917,
+      "afterBytes": 2491
+    },
+    "qing-agent-orchestrator-full": {
+      "beforeBytes": 5271,
+      "afterBytes": 2856
+    }
+  },
+  "scenarios": [
+    {
+      "name": "sequential-safe",
+      "before": {
+        "tier": "lite",
+        "childBudget": 1
+      },
+      "after": {
+        "tier": "direct",
+        "childBudget": 0
+      },
+      "independentReviewPreserved": true
+    },
+    {
+      "name": "fixed-complete-unit",
+      "before": {
+        "tier": "lite",
+        "childBudget": 1
+      },
+      "after": {
+        "tier": "lite",
+        "childBudget": 1
+      },
+      "independentReviewPreserved": true
+    },
+    {
+      "name": "explicit-lite",
+      "before": {
+        "tier": "lite",
+        "childBudget": 1
+      },
+      "after": {
+        "tier": "lite",
+        "childBudget": 1
+      },
+      "independentReviewPreserved": true
+    },
+    {
+      "name": "high-effect",
+      "before": {
+        "tier": "full",
+        "childBudget": 2
+      },
+      "after": {
+        "tier": "full",
+        "childBudget": 2
+      },
+      "independentReviewPreserved": true
+    }
+  ],
+  "limits": [
+    "Not a replay of the supplied six task runs: original fixtures and per-request measurements were not supplied",
+    "No measured total tokens, pricing, success rate or wall-clock speed improvement",
+    "Child budgets are decisions, not counts of actual executions"
+  ]
+}

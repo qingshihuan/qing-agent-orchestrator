@@ -1,5 +1,9 @@
 # Qing-Agent-Orchestrator
 
+## v0.13.0 — Parent-round and coordination overhead
+
+Direct starts useful work immediately. Lite needs a substantial fixed-contract deliverable, not complexity alone. Keep parent integration independent without duplicating child implementation; preserve permissions and required review. [Details](docs/parent-overhead.md) · [Release](docs/release-notes-v0.13.0.md)
+
 ## v0.12.0 — Current Node.js compatibility
 
 Full tests on Windows/Linux with Node.js 22, 24 and 26; builds use 24 LTS and each matrix job smoke-tests the shipped ZIPs. The runtime minimum is 22; Standard remains Node-free. [Details](docs/node-support.md) · [Release](docs/release-notes-v0.12.0.md)

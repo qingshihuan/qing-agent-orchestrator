@@ -34,7 +34,7 @@ test("each new user turn and delegation milestone classify only remaining work a
   for (const milestone of ["before-child-creation", "before-child-reactivation", "before-revision"] as const) {
     const lite = reclassifyRemainingPhase(phase({
     milestone,
-    text: "先规划接口，然后实现并测试剩余的本地修复",
+    text: "使用 Qing Lite：先规划接口，然后实现并测试剩余的本地修复",
     route: "hybrid",
     category: "mixed",
     complexity: { score: 45, band: "complex", category: "mixed", role: "planner", risk: "medium", scope: "multi-step", signals: [], reasons: [] },

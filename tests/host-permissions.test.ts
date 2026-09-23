@@ -76,7 +76,7 @@ async function cli(directory:string,config:string,args:string[]){
 }
 test("actual Direct and Lite dispatch preserve native authority in full and compact responses",async()=>{
   await inFixture(async(directory,config)=>{
-    for(const [task,status] of [["解释这个项目的作用","DIRECT_EXECUTION_REQUIRED"],["先规划接口，然后实现并测试","LITE_EXECUTION_REQUIRED"]]){
+    for(const [task,status] of [["解释这个项目的作用","DIRECT_EXECUTION_REQUIRED"],["使用 Qing Lite：先规划接口，然后实现并测试","LITE_EXECUTION_REQUIRED"]]){
       for(const flags of [[],["--compact"]]){
         const result=await cli(directory,config,["dispatch","--task",task!,"--workspace",directory,"--no-model-probe",...flags]);
         assert.equal(result.exitCode,0,result.stderr);

@@ -1,5 +1,9 @@
 # 青-Agent-Orchestrator
 
+## v0.13.0 — 优先减少父任务轮次与重复工作
+
+Direct 直接执行；Lite 需要明确的委派收益，不因多步骤自动分派。子任务完成实现与测试，父任务专注集成验收。保留必要权限、测试和独立审查。 [Details](docs/parent-overhead.md) · [Release](docs/release-notes-v0.13.0.md)
+
 ## v0.12.0 — Node.js 最新版兼容
 
 Windows/Linux × Node.js 22、24、26 完整测试；统一以 24 LTS 构建，并直接验证发布 ZIP。最低运行时声明为 22，标准版仍不需要 Node.js。 [Details](docs/node-support.md) · [Release](docs/release-notes-v0.12.0.md)

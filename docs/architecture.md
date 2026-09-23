@@ -78,3 +78,6 @@ heartbeat 仅表达 Relay 尚未观察到退出。测试真值来自 Relay 父�
 ## v0.11 宿主权限归属
 
 原生控制输出保留不可授权的 permissionHandling 元数据；桌面 REQUIRE_APPROVAL 映射为 HOST_PERMISSION_CHECK_REQUIRED，DENY 仍拒绝。完整效果报告不丢失；只有宿主的当前有效权限和实际任务范围决定是否需要提示。元数据不是授权令牌，独立 CLI 无权复用它绕过自己的 gate。参见 host-permissions.md。
+
+## v0.13 delegation economics
+Before ordinary Lite promotion, the pure orchestration policy evaluates a fixed contract, acceptance, substantial work and nonduplicating parent activity. Complexity/multi-step/mixed alone no longer promotes Lite. Unknown evidence stays Direct without a new estimator call. Explicit bounded delegation and existing Full risk/review conditions still take precedence. Optional routeTask delegationEvidence is an internal observed-work hint, not permission or a prediction. See parent-overhead.md. Native skill Direct execution requires no control-plane command; CLI dispatch remains available to machine callers.
