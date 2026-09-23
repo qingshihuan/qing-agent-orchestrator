@@ -51,8 +51,8 @@ test("blocked, duplicate or dominant parent work rejects a cheap-child-only argu
     assert.equal(assessDelegationBenefit("实现模块", { ...evidence, parentWork }).worthwhile, false);
   }
 });
-test("a substantial slice is useful only while the parent does disjoint work", () => {
-  assert.equal(assessDelegationBenefit("实现模块", { ...evidence, boundary: "independent-slice", parentWork: "independent-work" }).worthwhile, true);
+test("a substantial slice does not bypass the single-owner whole-task policy", () => {
+  assert.equal(assessDelegationBenefit("实现模块", { ...evidence, boundary: "independent-slice", parentWork: "independent-work" }).worthwhile, false);
   assert.equal(assessDelegationBenefit("实现模块", { ...evidence, boundary: "independent-slice" }).worthwhile, false);
   assert.equal(assessDelegationBenefit("实现模块", { ...evidence, boundary: "coupled" }).worthwhile, false);
 });
@@ -61,8 +61,8 @@ test("explicit bounded delegation is respected but negated delegation is not for
   assert.equal(routeTask("不要创建子智能体，"+sequential).orchestration.tier, "direct");
   assert.equal(assessDelegationBenefit("do not delegate; implement the task", evidence).worthwhile, false);
 });
-test("Full risk, parallel scope, explicit CLI and configured review always outrank savings", () => {
-  for (const task of ["实现修复并部署到生产环境", "推送到 origin/main", "读取命名密钥", "同时修改前后端和数据库服务", "并行处理多个独立工作流", "使用完整 Qing 并安排独立 Reviewer 实现功能", "使用 CLI 完成任务"]) {
+test("Actual risk and explicitly configured review always outrank savings", () => {
+  for (const task of ["实现修复并部署到生产环境", "推送到 origin/main", "读取命名密钥", "同时修改前后端并部署到生产环境", "并行执行破坏性数据库迁移", "使用完整 Qing 并安排独立 Reviewer 实现功能", "使用 CLI 执行生产部署"]) {
     const decision = routeTask(task, { delegationEvidence: { ...evidence, work: "small" } });
     assert.equal(decision.orchestration.tier, "full", task);
     assert.equal(decision.orchestration.independentReviewer, true, task);

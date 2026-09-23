@@ -10,9 +10,8 @@ export const defaultOrchestrationConfig = {
     fullBudgetSource: "default",
     legacyV07Compatibility: [],
 };
-const explicitFull = /(?:启动|使用|采用|进入).{0,10}(?:Level\s*3|完整(?:版)?\s*Qing|完整编排|全量编排)|(?:独立|单独)\s*(?:Reviewer|审查(?:者|代理))|(?:使用|启用|启动|切换到?|改用)\s*(?:Codex\s*)?CLI|full(?:\s+qing|\s+orchestration)|independent\s+reviewer|(?:use|enable|start|switch\s+to)\s+(?:codex\s+)?cli/i;
+const explicitFull = /(?:启动|使用|采用|进入).{0,10}(?:Level\s*3|完整(?:版)?\s*Qing|完整编排|全量编排)|(?:独立|单独)\s*(?:Reviewer|审查(?:者|代理))|full(?:\s+qing|\s+orchestration)|independent\s+reviewer/i;
 const explicitDelegation = /(?:使用|创建|生成|启用).{0,10}(?:子(?:智能体|代理)|agent)|(?:delegate|spawn).{0,10}(?:agent|subagent)|Qing\s*Lite|轻量编排/i;
-const genuinelyParallel = /多个(?:互相)?独立(?:任务|工作流|工作项)|并行(?:任务|工作流|实现|审查)|parallel\s+(?:tasks?|workstreams?)|independent\s+workstreams?/i;
 const highEffectSignals = new Set([
     "infrastructure",
     "external-action",
@@ -29,12 +28,11 @@ const highEffectSignals = new Set([
 export function decideOrchestration(input) {
     const config = input.config ?? defaultOrchestrationConfig;
     const text = input.text.trim();
-    const forcedFull = config.mode === "full" || explicitFull.test(text) || input.signals.includes("cli-backend-condition");
-    const decomposable = genuinelyParallel.test(text);
+    const forcedFull = config.mode === "full" || explicitFull.test(text);
+    const decomposable = false; // Parallel execution is not enabled by a text hint.
     const riskyEffect = input.signals.some((signal) => highEffectSignals.has(signal))
         || input.complexity.risk === "critical";
-    const crossSystem = input.complexity.scope === "cross-system";
-    if (input.route === "chat" && !forcedFull && !decomposable) {
+    if (input.route === "chat" && !forcedFull && !riskyEffect) {
         return {
             tier: "direct",
             childAgentBudget: 0,
@@ -47,12 +45,10 @@ export function decideOrchestration(input) {
             reasons: ["parent-answer"],
         };
     }
-    if (forcedFull || riskyEffect || crossSystem || decomposable) {
+    if (forcedFull || riskyEffect) {
         const reasons = [
             ...(forcedFull ? [config.mode === "full" ? "configuration-forces-full" : input.signals.includes("cli-backend-condition") ? "explicit-cli-backend-workflow" : "explicit-full-request"] : []),
             ...(riskyEffect ? ["high-risk-or-external-effect"] : []),
-            ...(crossSystem ? ["cross-system-scope"] : []),
-            ...(decomposable ? ["genuinely-parallel-work"] : []),
         ];
         return {
             tier: "full",
@@ -70,7 +66,7 @@ export function decideOrchestration(input) {
     // alone cannot justify paying for an extra parent/child conversation.
     const delegation = assessDelegationBenefit(text, input.delegationEvidence);
     const requestedDelegation = explicitDelegation.test(text) && !delegationDeclined(text);
-    const needsLite = requestedDelegation || delegation.worthwhile;
+    const needsLite = requestedDelegation || delegation.worthwhile || input.signals.includes("cli-backend-condition");
     if (needsLite) {
         return {
             tier: "lite",

@@ -1,5 +1,10 @@
 # 青-Agent-Orchestrator
 
+## Experimental single-owner architecture (0.14.0-dev.1)
+
+单执行者完成完整任务；执行拓扑、独立审查、权限分别判断。新增程序化 execute-single，不增加常驻管理模型。源码与仓库 ZIP 是待实测候选，稳定 Release 保持 v0.13.0；没有已实现的速度/费用节省比例。 See [architecture and limits](docs/single-owner.md).
+
+
 ## v0.13.0 — 优先减少父任务轮次与重复工作
 
 Direct 直接执行；Lite 需要明确的委派收益，不因多步骤自动分派。子任务完成实现与测试，父任务专注集成验收。保留必要权限、测试和独立审查。 [Details](docs/parent-overhead.md) · [Release](docs/release-notes-v0.13.0.md)
@@ -22,7 +27,7 @@ Astra 按需启用而非全局默认；紧凑执行上下文、分层读取规�
 
 [English](README.en.md) · [v0.12.0 发布说明](docs/release-notes-v0.12.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
-**让擅长理解、规划和沟通的模型先把事情想清楚，让擅长代码与工程执行的 Codex 完成实现与验证。**
+**由一个合适的执行者完整完成任务；不默认叠加持续工作的管理模型。**
 
 青-Agent-Orchestrator 把 ChatGPT/Codex 桌面客户端里的规划、委派、模型选择、审批、执行和审查组织成一条可控工作流。它面向已经在桌面客户端中使用 OpenAI 订阅能力的用户：默认不要求 OpenAI API Key，也不会因为任务复杂、需要写代码或耗时较长就把你赶到命令行。
 
@@ -42,7 +47,7 @@ Astra 按需启用而非全局默认；紧凑执行上下文、分层读取规�
 
 路由和最终报告只使用一个高层执行归属字段：父任务直接回答为 `executionOwner: ChatGPT`，Relay、内部子任务或 CLI 执行为 `executionOwner: Codex`。它不要求展示具体工具名称，也不建立逐工具账本。
 
-复杂度分析不是“快/慢”二选一：它按 category、role、risk、single/multi-step/cross-system scope 和 signals 计算可解释分数。复杂度只帮助判断是否值得委派；高风险/外部效果、跨系统、真正并行或显式 Full 请求才进入完整编排。
+复杂度分析不是“快/慢”二选一：它按 category、role、risk、single/multi-step/cross-system scope 和 signals 计算可解释分数。复杂度只帮助判断是否值得委派；仅真实风险/外部效果或明确独立审查要求进入审查路径；跨模块和可并行本身不再触发 Full。
 
 模型候选明确绑定 `desktop-child` 或 `codex-cli`。桌面候选继续以宿主公布的能力快照为准，内部子任务实际接收 `{ model, reasoning_effort }`，显式值只作用于委派后端，不改变父任务模型。CLI 路径实际接收 `-m` 和 `model_reasoning_effort`；配置层可以表达 `minimal|low|medium|high|xhigh|max|ultra`，但当前安装的 `codex debug models --bundled` 目录才是模型、推理强度和最低客户端版本的权威来源。CLI 候选还必须通过受限、只读、结构化的账户 entitlement 探针，目录有效但账户不可用的组合不会进入健康状态。
 
@@ -129,7 +134,7 @@ $qing-agent-orchestrator-full
 目标：把仓库检查接入 CI，并提供机器可读状态。
 ```
 
-普通、安全、单一范围的桌面任务由父任务直接完成。只有有界复杂工作才创建一个内部 Executor；高风险、跨系统或真正可并行的工作才进入 Full。
+普通、安全、单一范围的桌面任务由父任务直接完成。只有有界复杂工作才创建一个内部 Executor；仅真实高风险或明确独立审查要求进入 Full；默认单一实现负责人。
 
 ## CLI 什么时候才会出现
 

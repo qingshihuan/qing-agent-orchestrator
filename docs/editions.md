@@ -1,3 +1,9 @@
+# Current experimental architecture
+
+The single-owner rules in [single-owner.md](single-owner.md) supersede the historical topology/review coupling below. Parallel capability, cross-module scope and transport alone no longer mandate an independent Reviewer. Native instructions and execute-single have different enforcement boundaries; the latter is optional and requires existing authority. Stable Release remains v0.13.0 until connected verification.
+
+## Historical design below (superseded where noted)
+
 # 版本与执行方式（v0.11）
 
 默认桌面标准版：Direct/Lite/Full、原生委派、宿主权限与分层验证；无运行时、启动器或 CLI 依赖。完整版增加可选进程能力，普通任务仍桌面优先。两版都由 Qing 决定任务是否值得委派，用户无需选择档位。

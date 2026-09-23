@@ -1,12 +1,9 @@
 name: Release
-# Idempotent publication: a repeated run reports an existing published release.
-
+# Stable publication is idempotent. Development builds never replace Latest.
 on:
   push:
-    branches:
-      - main
-    tags:
-      - "v*.*.*"
+    branches: [main]
+    tags: ["v*.*.*"]
     paths:
       - "package.json"
       - ".node-version"
@@ -19,14 +16,11 @@ on:
       - ".gitattributes"
       - ".github/workflows/release.yml"
   workflow_dispatch:
-
 permissions:
   contents: write
-
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
   release:
     runs-on: windows-latest
@@ -36,48 +30,38 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           check-latest: true
           cache: npm
-
       - name: Read and validate release version
         id: version
         shell: pwsh
         run: |
           $package = Get-Content -Raw -LiteralPath package.json | ConvertFrom-Json
-          # npm lockfiles contain packages[""]. PowerShell only preserves an
-          # empty JSON property name when the object is parsed as a hashtable.
           $lock = Get-Content -Raw -LiteralPath package-lock.json | ConvertFrom-Json -AsHashtable
           $runtime = Get-Content -Raw -LiteralPath .agents/skills/qing-agent-orchestrator-full/runtime/package.json | ConvertFrom-Json
           $version = [string]$package.version
-          if ($version -notmatch '^\d+\.\d+\.\d+$') {
-            throw "package.json version must be a stable semantic version: $version"
-          }
-          if ([string]$lock["version"] -ne $version -or [string]$lock["packages"][""]["version"] -ne $version) {
-            throw "package-lock.json is not synchronized with package.json version $version."
-          }
-          if ([string]$runtime.version -ne $version) {
-            throw "The packaged full runtime version is not synchronized with package.json version $version."
-          }
-          if ($env:GITHUB_EVENT_NAME -eq "push" -and $env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$version") {
-            throw "Pushed tag $env:GITHUB_REF_NAME does not match package version v$version."
-          }
-          $notes = "docs/release-notes-v$version.md"
-          if (-not (Test-Path -LiteralPath $notes -PathType Leaf)) {
-            throw "Release notes are missing: $notes"
-          }
-          $changelog = Get-Content -Raw -LiteralPath CHANGELOG.md
-          if ($changelog -notmatch "(?m)^## $([regex]::Escape($version)) - \d{4}-\d{2}-\d{2}\r?$") {
-            throw "CHANGELOG.md has no dated section for $version."
-          }
+          $stable = $version -match '^\d+\.\d+\.\d+$'
+          if (-not $stable -and $version -notmatch '^\d+\.\d+\.\d+-dev\.\d+$') { throw "Unsupported release version: $version" }
+          if ([string]$lock["version"] -ne $version -or [string]$lock["packages"][""]["version"] -ne $version) { throw 'Root/lock version mismatch' }
+          if ([string]$runtime.version -ne $version) { throw 'Packaged runtime version mismatch' }
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag/package mismatch' }
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
+          "publish=$($stable.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if (-not $stable) {
+            Write-Host 'Experimental source only: no Release, tags, uploads, or Latest promotion. Connected performance validation is still required.'
+            exit 0
+          }
+          $notes = "docs/release-notes-v$version.md"
+          if (-not (Test-Path -LiteralPath $notes -PathType Leaf)) { throw "Missing release notes: $notes" }
+          $changelog = Get-Content -Raw -LiteralPath CHANGELOG.md
+          if ($changelog -notmatch "(?m)^## $([regex]::Escape($version)) - \d{4}-\d{2}-\d{2}\r?$") { throw "Missing changelog for $version" }
           "notes=$notes" >> $env:GITHUB_OUTPUT
-
       - name: Check whether the release already exists
+        if: steps.version.outputs.publish == 'true'
         id: existing
         shell: pwsh
         env:
@@ -85,123 +69,84 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           $json = gh release view $env:TAG --json isDraft,url 2>$null
-          $viewExitCode = $LASTEXITCODE
-          if ($viewExitCode -eq 0) {
+          if ($LASTEXITCODE -eq 0) {
             $release = $json | ConvertFrom-Json
             "exists=true" >> $env:GITHUB_OUTPUT
-            "draft=$([string]$release.isDraft).ToLowerInvariant()" >> $env:GITHUB_OUTPUT
+            "draft=$(([string]$release.isDraft).ToLowerInvariant())" >> $env:GITHUB_OUTPUT
             "url=$($release.url)" >> $env:GITHUB_OUTPUT
-          }
-          else {
+          } else {
             "exists=false" >> $env:GITHUB_OUTPUT
             "draft=false" >> $env:GITHUB_OUTPUT
           }
-          # GitHub's pwsh wrapper exits with the last native command code. A
-          # missing release is expected here, so terminate this probe cleanly.
           exit 0
-
       - name: Install dependencies
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         run: npm ci --ignore-scripts
-
       - name: Typecheck and test
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         env:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
           TMPDIR: ${{ runner.temp }}
         run: |
           npm run typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Typecheck failed' }
           npm test
-
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
       - name: Preserve committed archives
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         shell: pwsh
         run: Copy-Item -LiteralPath artifacts -Destination "${{ runner.temp }}/committed-artifacts" -Recurse
-
       - name: Rebuild and validate installable packages
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         shell: pwsh
         run: ./scripts/package-skill-editions.ps1 -Validate -ValidationRoot ".qing/package-validation/release-${{ github.run_id }}-${{ github.run_attempt }}"
-
       - name: Verify committed archives exactly match the release build
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         shell: pwsh
         run: |
           ./scripts/compare-skill-archives.ps1 -CommittedRoot "${{ runner.temp }}/committed-artifacts" -GeneratedRoot artifacts -ScratchRoot "${{ runner.temp }}/qing-release-compare-${{ github.run_id }}-${{ github.run_attempt }}"
-          foreach ($name in @(
-            "qing-agent-orchestrator-standard.zip",
-            "qing-agent-orchestrator-full.zip",
-            "SHA256SUMS.txt"
-          )) {
-            $committed = (Get-FileHash -LiteralPath "${{ runner.temp }}/committed-artifacts/$name" -Algorithm SHA256).Hash
-            $generated = (Get-FileHash -LiteralPath "artifacts/$name" -Algorithm SHA256).Hash
-            if ($committed -ne $generated) {
-              throw "Deterministic release artifact mismatch for $name."
-            }
+          foreach ($name in @('qing-agent-orchestrator-standard.zip','qing-agent-orchestrator-full.zip','SHA256SUMS.txt')) {
+            $a = (Get-FileHash -LiteralPath "${{ runner.temp }}/committed-artifacts/$name" -Algorithm SHA256).Hash
+            $b = (Get-FileHash -LiteralPath "artifacts/$name" -Algorithm SHA256).Hash
+            if ($a -ne $b) { throw "Deterministic release artifact mismatch: $name" }
           }
-
       - name: Verify generated runtime has no semantic drift
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         shell: pwsh
         run: |
-          $runtimePath = ".agents/skills/qing-agent-orchestrator-full/runtime"
+          $runtimePath = '.agents/skills/qing-agent-orchestrator-full/runtime'
           $changed = @(git diff --ignore-cr-at-eol --name-only -- $runtimePath)
           $untracked = @(git ls-files --others --exclude-standard -- $runtimePath)
-          if ($changed.Count -ne 0 -or $untracked.Count -ne 0) {
-            if ($changed.Count -ne 0) {
-              $changed | ForEach-Object { Write-Host $_ }
-              git diff --ignore-cr-at-eol -- $runtimePath
-            }
-            if ($untracked.Count -ne 0) {
-              $untracked | ForEach-Object { Write-Host $_ }
-            }
-            throw "The committed full-skill runtime differs from the release build."
-          }
-
+          if ($changed.Count -ne 0 -or $untracked.Count -ne 0) { throw 'Committed runtime differs from release build' }
       - name: Smoke-test the exact release ZIPs on the build LTS
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         run: python scripts/smoke-release-packages.py --expected-node 24
-
       - name: Create or update a draft release
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
-          VERSION: ${{ steps.version.outputs.version }}
           NOTES: ${{ steps.version.outputs.notes }}
           RELEASE_EXISTS: ${{ steps.existing.outputs.exists }}
         run: |
           $title = "Qing-Agent-Orchestrator $env:TAG"
-          if ($env:RELEASE_EXISTS -eq "true") {
+          if ($env:RELEASE_EXISTS -eq 'true') {
             gh release edit $env:TAG --title $title --notes-file $env:NOTES --target $env:GITHUB_SHA --draft
-          }
-          else {
+          } else {
             gh release create $env:TAG --target $env:GITHUB_SHA --title $title --notes-file $env:NOTES --draft
           }
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create or update draft release $env:TAG."
-          }
-          gh release upload $env:TAG `
-            artifacts/qing-agent-orchestrator-standard.zip `
-            artifacts/qing-agent-orchestrator-full.zip `
-            artifacts/SHA256SUMS.txt `
-            --clobber
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to upload release assets for $env:TAG."
-          }
-
+          if ($LASTEXITCODE -ne 0) { throw 'Draft creation failed' }
+          gh release upload $env:TAG artifacts/qing-agent-orchestrator-standard.zip artifacts/qing-agent-orchestrator-full.zip artifacts/SHA256SUMS.txt --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Artifact upload failed' }
       - name: Publish release
-        if: steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true'
+        if: steps.version.outputs.publish == 'true' && (steps.existing.outputs.exists != 'true' || steps.existing.outputs.draft == 'true')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: gh release edit $env:TAG --draft=false --latest
-
       - name: Report existing published release
-        if: steps.existing.outputs.exists == 'true' && steps.existing.outputs.draft != 'true'
-        shell: pwsh
-        run: |
-          Write-Host "Release already exists and is published: ${{ steps.existing.outputs.url }}"
+        if: steps.version.outputs.publish == 'true' && steps.existing.outputs.exists == 'true' && steps.existing.outputs.draft != 'true'
+        run: Write-Host "Release already exists ${{ steps.existing.outputs.url }}"

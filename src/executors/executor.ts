@@ -2,6 +2,8 @@ import type { ProcessExitMetadata, ProcessHandle, ProcessStartMetadata } from ".
 import type { ExecutionResult, Handoff } from "../types.js";
 
 export interface ExecutionContext {
+  singleOwner?: boolean;
+  onUsageSnapshot?: (usage: import("../codex-usage.js").CodexUsage) => void;
   iteration: number;
   revisionInstructions: string[];
   onProcessStart?: (metadata: ProcessStartMetadata) => void;

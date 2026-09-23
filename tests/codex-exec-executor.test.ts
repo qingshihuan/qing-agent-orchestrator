@@ -734,3 +734,15 @@ test("ordinary failure and timeout never trigger lazy model preflight", async ()
     assert.equal(runner.requests.filter(r=>r.args[0]==="exec").length,1);
   }
 });
+
+test("single owner disables collaboration per invocation, carries whole-task context and never follows a rejection ladder", async () => {
+  const handoff = await exampleHandoff();
+  const fake = new FakeCodexRunner(handoff, true, false, [processResult({ exitCode: 1, stderr: "Requested model gpt-6-sol is unavailable for this invocation." })]);
+  const execution = await new CodexExecExecutor({ ...options(), modelSelection: selectedModelWithFallback() }, fake).execute(handoff, { iteration: 1, revisionInstructions: [], singleOwner: true });
+  assert.equal(execution.status, "failed");
+  const requests = fake.requests.filter(r => r.args[0] === "exec");
+  assert.equal(requests.length, 1);
+  assert.ok(requests[0]!.args.includes("features.multi_agent=false"));
+  assert.match(requests[0]!.stdin, /sole implementation owner/);
+  assert.equal(requests[0]!.args[requests[0]!.args.indexOf("--sandbox") + 1], "workspace-write");
+});

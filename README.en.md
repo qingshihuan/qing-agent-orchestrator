@@ -1,5 +1,10 @@
 # Qing-Agent-Orchestrator
 
+## Experimental single-owner architecture (0.14.0-dev.1)
+
+单执行者完成完整任务；执行拓扑、独立审查、权限分别判断。新增程序化 execute-single，不增加常驻管理模型。源码与仓库 ZIP 是待实测候选，稳定 Release 保持 v0.13.0；没有已实现的速度/费用节省比例。 See [architecture and limits](docs/single-owner.md).
+
+
 ## v0.13.0 — Parent-round and coordination overhead
 
 Direct starts useful work immediately. Lite needs a substantial fixed-contract deliverable, not complexity alone. Keep parent integration independent without duplicating child implementation; preserve permissions and required review. [Details](docs/parent-overhead.md) · [Release](docs/release-notes-v0.13.0.md)

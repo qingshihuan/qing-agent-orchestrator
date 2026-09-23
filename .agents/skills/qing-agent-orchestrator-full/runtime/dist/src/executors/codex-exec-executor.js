@@ -1,3 +1,4 @@
+import { parseCodexUsage } from "../codex-usage.js";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -183,7 +184,7 @@ function validateJsonl(stdout) {
 }
 export function buildCodexPrompt(handoff, context) {
     return [
-        "You are the Executor in the Qing Agent Orchestrator workflow.",
+        context.singleOwner ? "You are the sole implementation owner. Complete the WHOLE task, debug it and run its tests. Do not delegate, spawn agents, re-enter Qing, or create a management workflow." : "You are the Executor in the Qing Agent Orchestrator workflow.",
         "Perform only operations declared in the Handoff and only inside its workspace/allowedPaths.",
         "If another operation is required, do not perform it. Return it in proposedOperations for a new human gate.",
         "Return the final response as JSON matching the provided Executor Result schema.",
@@ -379,6 +380,8 @@ export class CodexExecExecutor {
                 }
                 if (isStrictReadOnlyDiagnostic(handoff, sandbox))
                     args.push("--skip-git-repo-check");
+                if (context.singleOwner)
+                    args.push("-c", "features.multi_agent=false");
                 args.push("-");
                 if (this.activeModelSelection) {
                     context.onModelEvent?.("model.attempt", {
@@ -410,7 +413,10 @@ export class CodexExecExecutor {
                         return handle.result;
                     })()
                     : await this.runner.run(request);
+                context.onUsageSnapshot?.(parseCodexUsage(result.stdout));
                 if (result.exitCode !== 0 || result.spawnError || result.timedOut || result.outputLimitExceeded || result.cancelled) {
+                    if (context.singleOwner)
+                        return failedResult(processFailure("Single-owner execution stopped; no automatic model ladder", result), this.activeModelSelection?.fallbackAudit ?? null);
                     const rejectionReason = this.activeModelSelection ? modelRejectionReason(result, this.activeModelSelection) : null;
                     if (!rejectionReason || !this.activeModelSelection) {
                         return failedResult(processFailure("codex exec failed", result), this.activeModelSelection?.fallbackAudit ?? null);

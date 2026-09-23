@@ -6,7 +6,7 @@ Do not create an independent Reviewer. For executable work, the parent checks th
 
 ## Lite
 
-The parent verifies the Executor's changed artifacts, acceptance checks, and fresh relevant tests. Permit at most one scoped revision. Escalate to Full only if evidence reveals high risk, cross-system effects, material ambiguity, or genuinely independent workstreams.
+The parent verifies the Executor's changed artifacts, acceptance checks, and fresh relevant tests. Permit at most one scoped revision. Escalate to Full only if evidence reveals high risk, actual consequential effects or an explicit independent-review requirement.
 
 ## Full
 
