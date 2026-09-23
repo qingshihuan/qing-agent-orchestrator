@@ -1,5 +1,9 @@
 # Qing-Agent-Orchestrator
 
+## v0.11.0 — Host-native permissions
+
+Qing chooses direct work or delegation automatically. Native calls reuse effective host permissions and exact task authorization without a second Qing confirmation. Standalone CLI enforcement remains separate. [Details](docs/host-permissions.md) · [Release](docs/release-notes-v0.11.0.md)
+
 ## v0.10.0 — GPT-6-only task scheduling
 
 Only Luna, Sol and Astra are explicit task candidates. Role-specific efforts, shared invocation checks and lazy fallbacks reduce redundant work. Migrate old explicit configs; safe installation and parent defaults are unchanged. See [release notes](docs/release-notes-v0.10.0.md).
@@ -8,7 +12,7 @@ Only Luna, Sol and Astra are explicit task candidates. Role-specific efforts, sh
 
 Opt-in Astra, lossless compact context, conditional references, targeted cached probes and incremental logs reduce redundant work without weakening evidence or effect gates. See [v0.9.0](docs/release-notes-v0.9.0.md).
 
-[简体中文](README.md) · [v0.10.0 release notes](docs/release-notes-v0.10.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+[简体中文](README.md) · [v0.11.0 release notes](docs/release-notes-v0.11.0.md) · [Editions](docs/editions.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
 **Let the model that understands, plans, and communicates well clarify the work; let Codex handle code and engineering execution.**
 
@@ -38,7 +42,7 @@ Availability is a current host/runtime snapshot and can drift with version, acco
 
 ## v0.8.1 maintenance update
 
-This release fixes concurrent health-cache initialization, stale candidate status, split UTF-8 output, and repeated process cancellation in the full runtime. It avoids redundant probes and releases completed output buffers. The bundled runtime and full ZIP are synchronized; standard-edition content, model choices, orchestration budgets, and effect gates are unchanged. See the [v0.10.0 release notes](docs/release-notes-v0.10.0.md).
+This release fixes concurrent health-cache initialization, stale candidate status, split UTF-8 output, and repeated process cancellation in the full runtime. It avoids redundant probes and releases completed output buffers. The bundled runtime and full ZIP are synchronized; standard-edition content, model choices, orchestration budgets, and effect gates are unchanged. See the [v0.11.0 release notes](docs/release-notes-v0.11.0.md).
 
 ## v0.8.0 release highlights
 
@@ -74,7 +78,7 @@ A Handoff is used only for Full or an exact effect contract. A safe Handoff need
 | Edition | Best for | Default execution | CLI |
 | --- | --- | --- | --- |
 | **Desktop Standard** `qing-agent-orchestrator` | Most desktop-client users | Parent task or internal child task | No launcher, runtime, or CLI dependency |
-| **Full** `qing-agent-orchestrator-full` | Users who also need CI, scheduling, batching, isolation, or machine-readable control | Still desktop-first | Optional, only after an explicit reason and user acceptance |
+| **Full** `qing-agent-orchestrator-full` | Users who also need CI, scheduling, batching, isolation, or machine-readable control | Still desktop-first | Automatically selected for a documented need; actual host/task authorization still applies |
 
 Choose **Desktop Standard** if you are unsure.
 
@@ -107,7 +111,7 @@ Desktop Standard:
 
 ```text
 $qing-agent-orchestrator
-Goal: review the login flow, implement the safe in-scope fix, and run the tests; pause only if a consequential effect is needed.
+Goal: automatically choose the right workflow, fix the in-scope login issue and run the tests under current host permissions; do not repeat existing scoped authorizations.
 ```
 
 Full edition:
@@ -131,9 +135,11 @@ The full edition may recommend the CLI only for:
 - a CLI-only model, profile, or environment;
 - explicit process isolation, a task queue, or a separate process.
 
-Code, complexity, and duration alone do not trigger it. Declining returns to desktop execution and suppresses repeated prompts. Accepting starts only a read-only dependency check; installation/configuration and consequential real effects remain gated, while safe work needs no extra Handoff approval.
+Code, complexity, and duration alone do not trigger it. Qing decides the route without a separate accept/decline question. An explicit refusal returns to native work and suppresses repeated prompts. Automatic routing may perform host-permitted read-only dependency checks, never installation, login or task execution. --no-model-probe prevents discovery/planning even with auto/accept. Actual missing scope/permission is handled once through the host; standalone Relay gates remain separate.
 
 ## Safety and evidence
+
+Native calls use effective host permissions and exact task authorization, without a second Qing gate-ID prompt. The following exact network allowlist and gate rules apply to the standalone Relay, not as duplicate dialogs on native subagents. Raw TOML, a screenshot or a generated Handoff cannot grant process authorization.
 
 - The request itself authorizes in-scope reversible project work; a Handoff is not an approval point.
 - `network_read` auto-allows only credential-free, query-safe, fragment-free HTTPS on the exact reviewed hosts `developers.openai.com`, `docs.github.com`, `github.com`, `help.openai.com`, `learn.chatgpt.com`, `openai.com`, `platform.openai.com`, `raw.githubusercontent.com`, and `www.openai.com`. Every other host, every IP literal, local/private name, userinfo, sensitive query, or fragment requires effect approval; legacy `network_access` always stays gated.

@@ -1,5 +1,9 @@
 # 青-Agent-Orchestrator
 
+## v0.11.0 — Host-native permissions
+
+Qing 自动决定直接完成或委派，原生调用复用宿主当前权限与已授权任务范围，不再重复询问计划、模型或路由。独立 CLI 保留自己的授权边界。 [Details](docs/host-permissions.md) · [Release](docs/release-notes-v0.11.0.md)
+
 ## v0.10.0 — GPT-6 三模型调度
 
 仅保留 Luna、Sol、Astra；按角色使用 low/medium/high，共享任务内预检，备用模型仅按需探测。旧显式配置需要迁移，安全安装默认与父任务模型不变。详见 [发布说明](docs/release-notes-v0.10.0.md)。
@@ -8,7 +12,7 @@
 
 Astra 按需启用而非全局默认；紧凑执行上下文、分层读取规则、定向缓存预检和增量日志减少重复工作。完整验收和效果审批不变。 See [v0.9.0](docs/release-notes-v0.9.0.md).
 
-[English](README.en.md) · [v0.10.0 发布说明](docs/release-notes-v0.10.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
+[English](README.en.md) · [v0.11.0 发布说明](docs/release-notes-v0.11.0.md) · [版本选择](docs/editions.md) · [架构与边界](docs/architecture.md) · [路线图](docs/roadmap.md)
 
 **让擅长理解、规划和沟通的模型先把事情想清楚，让擅长代码与工程执行的 Codex 完成实现与验证。**
 
@@ -38,7 +42,7 @@ Astra 按需启用而非全局默认；紧凑执行上下文、分层读取规�
 
 ## v0.8.1 维护更新
 
-本次发布修复完整版的模型健康缓存并发、状态误复用、跨块中文/emoji 输出和重复进程取消，减少无效探针及任务结束后的缓冲保留。完整版运行时与安装 ZIP 已同步；标准版内容、模型候选、编排预算和效果审批规则不变。详见 [v0.10.0 发布说明](docs/release-notes-v0.10.0.md)。
+本次发布修复完整版的模型健康缓存并发、状态误复用、跨块中文/emoji 输出和重复进程取消，减少无效探针及任务结束后的缓冲保留。完整版运行时与安装 ZIP 已同步；标准版内容、模型候选、编排预算和效果审批规则不变。详见 [v0.11.0 发布说明](docs/release-notes-v0.11.0.md)。
 
 ## v0.8.0 发布重点
 
@@ -74,7 +78,7 @@ Handoff 只用于 Full 或需要精确效果合同的任务。安全 Handoff 不
 | 版本 | 适合谁 | 默认方式 | CLI |
 | --- | --- | --- | --- |
 | **桌面标准版** `qing-agent-orchestrator` | 大多数桌面客户端用户 | 父任务或内部子任务 | 完全不包含启动器、runtime 或 CLI 依赖 |
-| **完整版** `qing-agent-orchestrator-full` | 还需要 CI、定时、批量、进程隔离或机器可读控制的用户 | 仍然是桌面优先 | 只有命中明确条件且用户接受后才按需启用 |
+| **完整版** `qing-agent-orchestrator-full` | 还需要 CI、定时、批量、进程隔离或机器可读控制的用户 | 仍然是桌面优先 | 命中明确进程需求时自动路由，仍受当前授权约束 |
 
 不知道选哪个时，安装**桌面标准版**。
 
@@ -107,7 +111,7 @@ Handoff 只用于 Full 或需要精确效果合同的任务。安全 Handoff 不
 
 ```text
 $qing-agent-orchestrator
-目标：检查当前项目的登录流程，提出方案，获批后实现并运行测试。
+目标：检查当前项目的登录流程，自动选择合适方式完成修复并验证，沿用当前宿主权限，不重复确认已授权工作。
 ```
 
 完整版：
@@ -131,11 +135,13 @@ $qing-agent-orchestrator-full
 - 需要 CLI 独占模型、profile 或环境；
 - 需要独立进程、任务队列或进程隔离。
 
-写代码、任务复杂或运行时间长本身不会触发 CLI。拒绝后继续桌面端能够完成的部分。接受后只做只读依赖检查；安装/配置及真实高风险效果仍保持审批边界，安全任务不再额外批准 Handoff。
+写代码、任务复杂或运行时间长本身不会触发 CLI。拒绝后继续桌面端能够完成的部分。路由无需接受/拒绝确认，可在现有宿主权限内进行只读依赖检查；安装/配置或新效果仍需实际授权，已授权范围不重复提示。
 
 完整版本地命令及安全前提见[可选 Codex CLI 接入](docs/codex-integration.md)。
 
 ## 安全与证据
+
+以下精确 gate/主机清单是独立 Relay 的边界；原生操作由宿主按当前有效权限和任务授权处理，不额外要求 Qing gate ID。
 
 - 用户目标直接授权范围内可逆的项目读写、构建和测试；Handoff 本身不再构成审批点。
 - `network_read` 只自动放行精确主机 `developers.openai.com`、`docs.github.com`、`github.com`、`help.openai.com`、`learn.chatgpt.com`、`openai.com`、`platform.openai.com`、`raw.githubusercontent.com`、`www.openai.com` 的无凭据、无敏感查询、无片段 HTTPS 读取。任意其他主机、所有 IP literal、内网/本地主机、userinfo、敏感 query 或 fragment 都需要效果批准；旧 `network_access` 始终 gated。

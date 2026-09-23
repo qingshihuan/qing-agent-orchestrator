@@ -73,7 +73,7 @@ export function routeExecutionMode(
         message: "建议切换 CLI 模式" as const,
         benefit: recommendationBenefit(reasonCodes),
         reasonCodes,
-        requiresUserChoice: true as const,
+        requiresUserChoice: false as const,
         response: "pending" as const,
         dependencyStatus: "not-checked" as const,
         installGuide: CLI_INSTALL_GUIDE,
@@ -100,7 +100,7 @@ export interface CliDependencyInspector {
 
 export async function respondToCliRecommendation(
   decision: ExecutionModeDecision,
-  response: "accept" | "decline",
+  response: "accept" | "decline" | "auto",
   inspector?: CliDependencyInspector,
 ): Promise<ExecutionModeDecision> {
   if (decision.edition !== "full" || !decision.recommendation || decision.mode !== "cli-recommended") {
@@ -120,7 +120,7 @@ export async function respondToCliRecommendation(
   return {
     ...decision,
     mode: dependencyStatus === "ready" ? "cli-full-planning" : "cli-setup-required",
-    recommendation: { ...decision.recommendation, response: "accepted", dependencyStatus },
+    recommendation: { ...decision.recommendation, response: response === "auto" ? "auto-selected" : "accepted", dependencyStatus },
     suppressCliPromptForTask: true,
   };
 }

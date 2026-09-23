@@ -1,47 +1,11 @@
-# 版本与执行模式
+# 版本与执行方式（v0.11）
 
-## 选择哪个版本
+默认桌面标准版：Direct/Lite/Full、原生委派、宿主权限与分层验证；无运行时、启动器或 CLI 依赖。完整版增加可选进程能力，普通任务仍桌面优先。两版都由 Qing 决定任务是否值得委派，用户无需选择档位。
 
-默认推荐桌面标准版。它覆盖 Direct/Lite/Full、自适应委派、效果 gate、桌面模型选择和分层验证，安装内容更少。
+原生操作复用宿主实际生效的配置和精确任务授权，不额外批准 Handoff/子智能体/模型或已授权效果。高风险操作的范围检查仍存在，只有缺少真正授权时才由宿主处理。详见 [宿主权限](host-permissions.md)。
 
-当你希望保留 CI、定时任务、应用关闭后持续运行、机器可读控制或 CLI 专属模型/环境时，选择完整版。完整版仍以桌面为默认，因此即使 CLI 未安装也能正常工作。
+完整版遇到明确 CLI、CI、无人值守、应用关闭后继续、机器可读控制或进程隔离需求时可自动选择进程路线；复杂/长任务本身不是理由。路由函数无 I/O，dispatch 可做只读依赖检查，不再要求固定接受/拒绝。显式拒绝有效且不重复提示。--no-model-probe 返回 CLI_DEPENDENCY_CHECK_REQUIRED，不发起依赖/模型调用。
 
-## 路由真值表
+缺少依赖或认证返回 CLI_SETUP_REQUIRED，不会安装、登录或提交任务。单独的 Relay 保留安全默认、精确效果授权和 --allow-real-execution；它没有可信的桌面权限继承通道，不可把 full-access 截图当作授权。
 
-| 请求特征 | 标准版 | 完整版 |
-| --- | --- | --- |
-| 解释、建议、分析 | 父任务直接完成 | 父任务直接完成 |
-| 安全、单一范围代码或内容交付 | Direct 父任务 | Direct 父任务 |
-| 有界复杂或多步骤工作 | Lite：1 个 Executor | Lite：1 个 Executor |
-| 高风险、跨系统、真正并行或显式 Full | Full + 独立 Reviewer | Full + 独立 Reviewer |
-| 明确要求新开可见任务 | 可见任务 | 可见任务 |
-| 明确要求 CLI | 继续桌面 | 建议切换 |
-| 脚本或 CI | 继续桌面 | 建议切换 |
-| 定时、批量、无人值守 | 继续桌面 | 建议切换 |
-| 关闭应用后继续 | 桌面并说明限制 | 建议切换 |
-| 机器可读 status/logs/cancel | 桌面并说明限制 | 建议切换 |
-| CLI 独占模型或环境 | 使用桌面候选 | 建议切换 |
-| 独立进程或任务队列 | 桌面 | 建议切换 |
-
-## 完整版交互状态
-
-1. desktop-native：正常桌面工作，不检查依赖。
-2. cli-recommended：显示“建议切换 CLI 模式”、收益和原因代码；不启动进程。
-3. 用户拒绝：
-   - desktop-fallback-selected；
-   - 当前任务不再提示；
-   - 继续桌面端可完成部分；
-   - 无法提供的无人值守或独占能力列为限制。
-4. 用户接受：
-   - 执行 doctor 依赖检查；
-   - missing/authentication-required → cli-setup-required；
-   - ready → 创建 Full Handoff 并评估效果。
-5. 全部为安全操作时进入 `FULL_EXECUTION_READY`；只有明确高风险效果进入 `AWAITING_APPROVAL`。
-
-## 安装
-
-把所选 ZIP 解压为同名技能目录并放入用户或项目的 .agents/skills。标准 ZIP 没有 scripts 或 runtime，并携带 Handoff 与 Review 的两个桌面专用、非进程型 JSON Schema；它们不复用完整版的进程事件合同。完整 ZIP 含 Relay runtime 和安全默认配置，但不含 Codex CLI 可执行文件。
-
-选择完整版不要求预装 CLI。只有接受切换建议后才检查本机状态；按照[官方 Codex CLI 文档](https://learn.chatgpt.com/docs/codex/cli)进行全局安装或配置修改仍需效果批准。安全任务不再额外批准 Handoff。
-
-本项目的打包步骤不会自动部署到用户技能目录。
+把对应 ZIP 解压到用户或项目的 .agents/skills；本项目打包不会自动部署到用户电脑。标准版有桌面专用 Handoff/Review schema；完整版有独立进程 schema 与安全默认配置，不携带 codex.exe。更新前备份自定义配置。

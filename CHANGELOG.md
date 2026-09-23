@@ -1,6 +1,17 @@
 # Changelog
 
-本项目采用语义化版本编号。当前稳定版本为 `v0.10.0`；既有版本的历史记录与标签语义保持不变。
+本项目采用语义化版本编号。当前稳定版本为 `v0.11.0`；既有版本的历史记录与标签语义保持不变。
+
+## 0.11.0 - 2026-09-23
+
+### Changed
+
+- Qing owns automatic tier/model/backend decisions; remove routing-choice round trips.
+- Native parent/child work delegates permission enforcement to the effective host session without duplicate Qing confirmations.
+- Preserve denied scopes and full effect evidence; native pending effects use HOST_PERMISSION_CHECK_REQUIRED, never a fabricated grant.
+- Automatic read-only dependency checks are recorded as auto-selected; no-model-probe and explicit refusal remain respected.
+- Keep standalone execution opt-in, exact gates and sandbox unchanged. No raw TOML/screenshot permission inference.
+- Rebuild both skills and runtime; see docs/host-permissions.md.
 
 ## 0.10.0 - 2026-09-23
 

@@ -58,7 +58,7 @@ export function routeExecutionMode(text, edition, taskRoute, orchestrationTier) 
             message: "建议切换 CLI 模式",
             benefit: recommendationBenefit(reasonCodes),
             reasonCodes,
-            requiresUserChoice: true,
+            requiresUserChoice: false,
             response: "pending",
             dependencyStatus: "not-checked",
             installGuide: CLI_INSTALL_GUIDE,
@@ -97,7 +97,7 @@ export async function respondToCliRecommendation(decision, response, inspector) 
     return {
         ...decision,
         mode: dependencyStatus === "ready" ? "cli-full-planning" : "cli-setup-required",
-        recommendation: { ...decision.recommendation, response: "accepted", dependencyStatus },
+        recommendation: { ...decision.recommendation, response: response === "auto" ? "auto-selected" : "accepted", dependencyStatus },
         suppressCliPromptForTask: true,
     };
 }
