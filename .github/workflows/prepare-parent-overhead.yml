@@ -28,15 +28,31 @@ jobs:
         run: |
           python .github/maintenance/parent-overhead.py
           if ($LASTEXITCODE -ne 0) { throw 'Source transformation failed' }
-      - name: Use actionable implementation wording in the automatic-routing fixture
+      - name: Align fixtures and reference tables with the revised delegation policy
         shell: python
         run: |
           from pathlib import Path
-          for name in ['tests/parent-overhead.test.ts', 'scripts/measure-parent-overhead.mjs']:
-              p = Path(name)
+          def change(path, old, new):
+              p = Path(path)
               source = p.read_text(encoding='utf-8')
-              assert '按固定接口独立交付完整模块' in source
-              p.write_bytes(source.replace('按固定接口独立交付完整模块', '按固定接口独立实现完整模块').encode('utf-8'))
+              assert source.count(old) == 1, (path, old)
+              p.write_bytes(source.replace(old,new,1).encode('utf-8'))
+          for name in ['tests/parent-overhead.test.ts', 'scripts/measure-parent-overhead.mjs']:
+              change(name, '按固定接口独立交付完整模块', '按固定接口独立实现完整模块')
+          change('tests/relay.test.ts', 'liteHandoff.objective = "先规划接口，然后实现并测试剩余的本地修复";', 'liteHandoff.objective = "使用 Qing Lite：先规划接口，然后实现并测试剩余的本地修复";')
+          change('tests/routing-precision.test.ts', '["先规划接口，然后实现并测试", "lite"],', '["先规划接口，然后实现并测试", "direct"],\n    ["按固定接口独立实现完整模块并通过既定验收测试，父任务只做集成验收", "lite"],')
+          change('tests/routing-precision.test.ts', '{ direct: 9, lite: 1, full: 5 }', '{ direct: 10, lite: 1, full: 5 }')
+          change('.agents/skills/qing-agent-orchestrator-full/references/orchestrator-spec.md', 'Bounded complex/multi-step work', 'Substantial independent deliverable with fixed contract and net delegation benefit')
+          p = Path('tests/parent-overhead.test.ts')
+          extra = '''
+          test("English fixed-contract hints route automatically while costly or incomplete hints stay Direct", () => {
+            const text = "self-contained implementation, fixed interface, existing acceptance tests, parent only verifies";
+            assert.equal(assessDelegationBenefit(text).worthwhile, true);
+            assert.equal(assessDelegationBenefit(text + "; tiny helper").worthwhile, false);
+            assert.equal(assessDelegationBenefit(text.replace("existing acceptance tests", "unknown checks")).worthwhile, false);
+          });
+          '''
+          p.write_bytes((p.read_text(encoding='utf-8')+'\n'+extra).encode('utf-8'))
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - name: Run every regression test
