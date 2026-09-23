@@ -47,9 +47,24 @@ jobs:
           [System.IO.File]::WriteAllText((Join-Path $runtimeRoot "config/relay.gpt6.json"), $gpt6Preset, [System.Text.UTF8Encoding]::new($false))
 
           '''
-          p.write_bytes(source.replace(anchor,addition+anchor).encode('utf-8'))
+          source=source.replace(anchor,addition+anchor)
+          expected='      "runtime/config/relay.user.json"'
+          assert source.count(expected)==1
+          source=source.replace(expected, expected+'\n      "runtime/config/relay.gpt6.json"')
+          mapping='      elseif ($relativePath.StartsWith("runtime/schemas/")) {'
+          assert source.count(mapping)==1
+          source=source.replace(mapping, '''      elseif ($relativePath -eq "runtime/config/relay.gpt6.json") {
+                  Join-Path $projectRoot "config/relay.example.json"
+                }
+          '''+mapping)
+          p.write_bytes(source.encode('utf-8'))
           preset=Path('.agents/skills/qing-agent-orchestrator-full/runtime/config/relay.gpt6.json')
           preset.write_bytes(Path('config/relay.example.json').read_bytes())
+          parsed=json.loads(preset.read_text(encoding='utf-8'))
+          assert parsed['executor']['mode']=='dry-run'
+          assert parsed['executor']['codexExec']['enabled'] is False
+          assert parsed['security']['approvedGateIds']==[]
+          assert {c['model'] for c in parsed['modelRouting']['candidates']}=={'gpt-6-luna','gpt-6-sol','gpt-6-astra'}
           p=Path('tests/codex-exec-executor.test.ts')
           extra='''
           test("runtime rejection lazily prepares an unverified fallback and preserves process scope", async () => {
