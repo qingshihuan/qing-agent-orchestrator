@@ -57,6 +57,12 @@ jobs:
           change('src/relay.ts',marker,marker+'\n      if (runHandle && await runHandle.isCancelled()) return { handoffId: handoff.id, executor: this.executor.name, status: "BLOCKED", preflightGate, attempts, phaseDecisions, message: "Cancelled before implementation; no owner started." };')
           change('tests/single-owner.test.ts','assert.equal(out.status,"BLOCKED"); assert.equal(out.attempts[0]?.review.verdict,"HUMAN_REVIEW");','assert.equal(out.status,"BLOCKED"); assert.match(out.message,/Protected inputs changed/); assert.equal(out.attempts.length,0);')
           exec(compile(Path('.github/maintenance/refine-single-owner.py').read_text(encoding='utf-8'),'single-owner-refinements','exec'),{})
+          change('tests/single-owner.test.ts','await store.cancelRun(handle.runId,async()=>{});','await store.cancelRun(handle.runId,async()=>true);')
+          # Start retains an explicit process request, but plans it without a model by default.
+          change('src/cli.ts','    if (decision.orchestration.tier === "lite") {\n      const bundle', '    if (decision.orchestration.tier === "lite" && decision.execution.mode !== "cli-recommended") {\n      const bundle')
+          # Refuse a nonauditable workspace before the new controller spends on execution.
+          change('src/single-owner-controller.ts','import { Relay,','import { captureGitSnapshot } from "./git-audit.js";\nimport { Relay,')
+          change('src/single-owner-controller.ts','    try {\n      const before', '    try {\n      if (!(await captureGitSnapshot(handoff.workspace.root)).isGit) throw new Error("An auditable Git workspace is required before starting the single owner.");\n      const before')
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - name: Complete regression suite
@@ -68,7 +74,7 @@ jobs:
         run: |
           npm test *> "$env:RUNNER_TEMP/qing-single-owner-tests.log"
           $code = $LASTEXITCODE
-          if ($code -ne 0) { Get-Content "$env:RUNNER_TEMP/qing-single-owner-tests.log" -Tail 180; throw 'Complete suite failed; no generated source is pushed' }
+          if ($code -ne 0) { Get-Content "$env:RUNNER_TEMP/qing-single-owner-tests.log" -Tail 140; throw 'Complete suite failed; no generated source is pushed' }
           Get-Content "$env:RUNNER_TEMP/qing-single-owner-tests.log" -Tail 12
       - name: Rebuild and validate both skill editions
         env:
